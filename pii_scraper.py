@@ -89,46 +89,300 @@ def manual(label, value, source="", tier=1, note=""):
 # SECTOR: ENERGY
 # ---------------------------------------------------------------------------
 
+# Hard limits for PEI grid (MW)
+CABLE_CAP_MW   = 300   # max import from NB via 4 subsea cables
+PEAK_RECORD_MW = 400   # recent winter peak record
+
+
+def fetch_gpei_energy():
+    """
+    Call the GPEI workflow API directly — this is the authoritative
+    Maritime Electric feed, updated every 15 minutes.
+    Returns dict with keys: load, wind, solar, fossil, wind_used,
+    wind_exported, update_time  — all floats in MW, or None on failure.
+
+    Endpoint documented by Peter Rukavina (ruk.ca) and confirmed by GPEI:
+      POST https://wdf.princeedwardisland.ca/prod/workflow
+      Body: {"featureName": "WindEnergy"}
+    """
+    url = "https://wdf.princeedwardisland.ca/prod/workflow"
+    try:
+        r = requests.post(
+            url,
+            json={"featureName": "WindEnergy"},
+            headers={**HEADERS, "Content-Type": "application/json"},
+            timeout=TIMEOUT
+        )
+        r.raise_for_status()
+        data = r.json()
+
+        # Response structure: {"components": [{"type": "...", "data": {...}}, ...]}
+        # Find the component that has the numeric fields we need.
+        components = data.get("components", [])
+        result = {}
+
+        for comp in components:
+            d = comp.get("data", {}) or comp.get("fields", {}) or comp
+            if not isinstance(d, dict):
+                continue
+            # Field names vary slightly by API version — check all known variants
+            for key in d:
+                lk = key.lower()
+                val = d[key]
+                try:
+                    fval = float(str(val).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                if "load" in lk and "on" in lk:
+                    result["load"] = fval
+                elif "wind" in lk and ("gen" in lk or "total" in lk):
+                    result["wind"] = fval
+                elif "solar" in lk and "gen" in lk:
+                    result["solar"] = fval
+                elif "fossil" in lk or "fuel" in lk:
+                    result["fossil"] = fval
+                elif "wind" in lk and "local" in lk:
+                    result["wind_used"] = fval
+                elif "wind" in lk and "export" in lk:
+                    result["wind_exported"] = fval
+                elif "update" in lk or "time" in lk:
+                    result["update_time"] = str(val)
+
+        # Fallback: try flat structure if components parsing found nothing
+        if not result:
+            flat = data if isinstance(data, dict) else {}
+            for key in flat:
+                lk = key.lower()
+                try:
+                    fval = float(str(flat[key]).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                if "load" in lk:       result["load"]   = fval
+                elif "wind" in lk:     result["wind"]   = fval
+                elif "solar" in lk:    result["solar"]  = fval
+                elif "fossil" in lk:   result["fossil"] = fval
+
+        return result if result else None
+
+    except Exception as e:
+        print(f"  [WARN] GPEI energy API — {e}", file=sys.stderr)
+        return None
+
+
 def scrape_energy():
     indicators_t1, indicators_t2, indicators_t3 = [], [], []
 
-    # ── Maritime Electric Grid Status ────────────────────────────────────
-    # maritimeelectric.com/outages/outages/grid-status/ has a public status page.
-    # The page uses dynamic JS widgets; we scrape the static text signals.
+    # ── GPEI / Maritime Electric live grid data ──────────────────────────
+    # Direct API: POST https://wdf.princeedwardisland.ca/prod/workflow
+    # {"featureName": "WindEnergy"} → MW values updated every 15 min
+    grid = fetch_gpei_energy()
+
+    if grid and "load" in grid:
+        load_mw   = grid.get("load",   0.0)
+        wind_mw   = grid.get("wind",   0.0)
+        solar_mw  = grid.get("solar",  0.0)
+        fossil_mw = grid.get("fossil", 0.0)
+
+        # NB import = load minus all on-island generation
+        # (can go negative when PEI is a net exporter — rare in winter)
+        on_island_gen = wind_mw + solar_mw + fossil_mw
+        nb_import_mw  = max(0.0, load_mw - on_island_gen)
+        nb_util_pct   = round((nb_import_mw / CABLE_CAP_MW) * 100, 1)
+
+        update_str = grid.get("update_time", GENERATED)
+
+        # ── Island System Load ───────────────────────────────────────────
+        load_status = "ok"
+        load_note   = ""
+        if load_mw >= 380:
+            load_status = "alert"
+            load_note   = f"Extreme demand — load shedding risk. Record: ~{PEAK_RECORD_MW} MW"
+        elif load_mw >= 300:
+            load_status = "warn"
+            load_note   = "Demand at or above cable import cap — on-island generation required"
+        indicators_t1.append(indicator(
+            "Island System Load", f"{load_mw:.1f}",
+            unit="MW",
+            status=load_status,
+            note=load_note,
+            context=f"Peak record: ~{PEAK_RECORD_MW} MW (Jan/Feb)",
+            source="Maritime Electric via GPEI",
+            tier=1,
+            date=update_str,
+        ))
+
+        # ── NB Cable Utilization ─────────────────────────────────────────
+        # This is the critical stress indicator — how close to the 300 MW hard cap
+        cable_status = "ok"
+        cable_note   = ""
+        if nb_util_pct >= 95:
+            cable_status = "alert"
+            cable_note   = "Cables at capacity — load shedding imminent without on-island backup"
+        elif nb_util_pct >= 80:
+            cable_status = "warn"
+            cable_note   = "High cable utilization — grid stress elevated"
+        indicators_t1.append(indicator(
+            "NB Cable Utilization", f"{nb_util_pct}",
+            unit=f"% of {CABLE_CAP_MW} MW cap  ({nb_import_mw:.0f} MW imported)",
+            status=cable_status,
+            note=cable_note,
+            context="4 subsea cables — hard physical limit",
+            source="Maritime Electric via GPEI",
+            tier=1,
+            date=update_str,
+            banner=(
+                f"NB cable import at {nb_util_pct}% capacity — load shedding risk"
+                if cable_status == "alert" else ""
+            ),
+        ))
+
+        # ── Wind Generation ──────────────────────────────────────────────
+        wind_pct = round((wind_mw / load_mw * 100), 1) if load_mw > 0 else 0
+        indicators_t1.append(indicator(
+            "Wind Generation", f"{wind_mw:.1f}",
+            unit=f"MW  ({wind_pct}% of load)",
+            status="ok",
+            context="PEI has ~204 MW installed wind capacity",
+            source="Maritime Electric via GPEI",
+            tier=1,
+            date=update_str,
+        ))
+
+        # ── Solar Generation ─────────────────────────────────────────────
+        if solar_mw is not None:
+            indicators_t2.append(indicator(
+                "Solar Generation", f"{solar_mw:.1f}",
+                unit="MW",
+                status="ok",
+                context="Includes Slemon Park, Sunbank + batteries",
+                source="Maritime Electric via GPEI",
+                tier=2,
+                date=update_str,
+            ))
+
+        # ── Fossil Fuel (on-island backup) ────────────────────────────────
+        fossil_status = "ok"
+        fossil_note   = ""
+        if fossil_mw > 20:
+            fossil_status = "warn"
+            fossil_note   = "Combustion turbines running — grid under pressure"
+        if fossil_mw > 60:
+            fossil_status = "alert"
+            fossil_note   = "Heavy fossil fuel dispatch — near peak capacity event"
+        indicators_t2.append(indicator(
+            "On-Island Fossil Fuel", f"{fossil_mw:.1f}",
+            unit="MW",
+            status=fossil_status,
+            note=fossil_note,
+            context="Combustion turbines — last resort backup",
+            source="Maritime Electric via GPEI",
+            tier=2,
+            date=update_str,
+        ))
+
+        # ── NB Import (absolute MW) ──────────────────────────────────────
+        indicators_t2.append(indicator(
+            "NB Import", f"{nb_import_mw:.0f}",
+            unit=f"MW  (cap: {CABLE_CAP_MW} MW)",
+            status="ok" if nb_import_mw < 240 else ("warn" if nb_import_mw < 285 else "alert"),
+            source="Maritime Electric via GPEI",
+            tier=2,
+            date=update_str,
+        ))
+
+        # Store grid data for the chart panel (attached to sector metadata)
+        grid_chart_data = {
+            "load":    round(load_mw, 1),
+            "wind":    round(wind_mw, 1),
+            "solar":   round(solar_mw, 1),
+            "fossil":  round(fossil_mw, 1),
+            "nb_import": round(nb_import_mw, 1),
+            "cable_cap": CABLE_CAP_MW,
+            "peak_record": PEAK_RECORD_MW,
+            "updated": update_str,
+        }
+
+    else:
+        # API unavailable — fall back to manual indicators
+        print("  [WARN] GPEI energy API returned no data — using manual fallback", file=sys.stderr)
+        for label, note in [
+            ("Island System Load",    "GPEI API unavailable — check maritimeelectric.com"),
+            ("NB Cable Utilization",  "GPEI API unavailable"),
+            ("Wind Generation",       "GPEI API unavailable"),
+        ]:
+            indicators_t1.append(manual(label, "unavailable",
+                source="Maritime Electric via GPEI", tier=1, note=note))
+        grid_chart_data = None
+
+    # ── Grid Status Index (Maritime Electric status page) ────────────────
+    # FIXED: We now only trigger alert/warn on the LIVE STATUS INDICATOR,
+    # not on any keyword found in body text (which always contains "load shedding"
+    # as explanatory text). We look for the specific status widget value.
     grid_url = "https://www.maritimeelectric.com/outages/outages/grid-status/"
     s = soup(grid_url)
     grid_status = "ok"
-    grid_note   = ""
     grid_value  = "Normal"
+    grid_note   = ""
     if s:
-        text = s.get_text(" ", strip=True).lower()
-        if "load shedding" in text or "rotating outage" in text:
-            grid_status = "alert"
-            grid_value  = "Load Shedding"
-            grid_note   = "Rotating outages active — reduce non-essential consumption"
-        elif "conservation" in text or "conservation request" in text:
-            grid_status = "warn"
-            grid_value  = "Conservation"
-            grid_note   = "Maritime Electric requesting voluntary conservation"
-        elif "caution" in text or "elevated" in text:
-            grid_status = "warn"
-            grid_value  = "Elevated demand"
+        # The Grid Status Index widget uses colour-coded status levels.
+        # Look for specific status indicator elements, NOT body text keywords.
+        # Status levels: Normal → Conservation Request → Elevated Concern → Load Shedding
+        page_text = s.get_text(" ", strip=True)
+
+        # Extract only the live status element — look for the status display
+        # near phrases like "Current Status:" or "Grid Status Index:"
+        status_match = re.search(
+            r"(?:current\s+status|grid\s+status\s+index)[:\s]+([A-Za-z\s]+?)(?:\.|,|\n|$)",
+            page_text, re.I
+        )
+        if status_match:
+            live_status = status_match.group(1).strip().lower()
+            if "load shed" in live_status or "rotating" in live_status:
+                grid_status = "alert"
+                grid_value  = "Load Shedding"
+                grid_note   = "Rotating outages active — reduce non-essential consumption now"
+            elif "elevated" in live_status:
+                grid_status = "warn"
+                grid_value  = "Elevated Concern"
+                grid_note   = "Grid under stress — conserve energy, especially peak hours"
+            elif "conservation" in live_status:
+                grid_status = "warn"
+                grid_value  = "Conservation Request"
+                grid_note   = "Maritime Electric requesting voluntary conservation"
+            else:
+                grid_status = "ok"
+                grid_value  = "Normal"
+        # If we can't extract a live status cleanly, use load data as proxy
+        elif grid and "load" in grid:
+            load_mw = grid.get("load", 0)
+            if load_mw >= 380:
+                grid_status = "alert"
+                grid_value  = "Critical Load"
+                grid_note   = f"System load {load_mw:.0f} MW — load shedding risk"
+            elif load_mw >= 300:
+                grid_status = "warn"
+                grid_value  = "High Demand"
+                grid_note   = f"System load {load_mw:.0f} MW — at cable import limit"
+
     indicators_t1.append(indicator(
-        "Grid Status Index", grid_value, status=grid_status,
+        "Grid Status Index", grid_value,
+        status=grid_status,
         note=grid_note,
         context="maritimeelectric.com/outages/outages/grid-status",
         source="Maritime Electric",
-        tier=1
+        tier=1,
+        banner=(
+            "LOAD SHEDDING ACTIVE — rotating outages in progress on PEI"
+            if grid_status == "alert" and "load shed" in grid_value.lower() else ""
+        ),
     ))
 
     # ── Outage customers ────────────────────────────────────────────────
-    # poweroutage.com aggregates Maritime Electric outage data
     outage_url = "https://poweroutage.com/ca/utility/1370"
     s2 = soup(outage_url)
     outage_customers = None
-    outage_status = "ok"
+    outage_status    = "ok"
     if s2:
-        # Look for customer count pattern
         text2 = s2.get_text(" ", strip=True)
         m = re.search(r"([\d,]+)\s+(?:customers?|cust)", text2, re.I)
         if m:
@@ -136,6 +390,7 @@ def scrape_energy():
             num = int(outage_customers.replace(",", ""))
             if num > 5000:  outage_status = "alert"
             elif num > 500: outage_status = "warn"
+
     if outage_customers is None:
         indicators_t1.append(manual(
             "Outage Customers", "check maritimeelectric.com",
@@ -152,66 +407,17 @@ def scrape_energy():
         ))
 
     # ── Summerside Electric Utility ──────────────────────────────────────
-    # Summerside has its own municipal utility (~9,000 customers).
-    # No public real-time API — manual tier
     indicators_t2.append(manual(
         "Summerside Utility Status", "see summerside.ca/electric",
         source="City of Summerside Electric Utility", tier=2
     ))
 
-    # ── Wind Generation (PEI has significant installed wind) ─────────────
-    # No real-time PEI-specific wind API; proxy via IESO-like data is not
-    # available for Maritimes. Use Environment Canada wind speed at North Cape
-    # as a generation proxy.
-    wx_url = "https://dd.weather.gc.ca/observations/xml/PE/hourly/PE_hourly_e.xml"
-    r_wx = get(wx_url)
-    wind_speed = None
-    wind_station = "North Cape"
-    if r_wx:
-        try:
-            wx_soup = BeautifulSoup(r_wx.text, "xml")
-            # Find North Cape or Tignish station
-            for stn in wx_soup.find_all("station"):
-                name = (stn.get("name") or "").lower()
-                if "north cape" in name or "tignish" in name or "summerside" in name:
-                    ws = stn.find("wind_speed")
-                    if ws and ws.text.strip():
-                        wind_speed = float(ws.text.strip())
-                        wind_station = stn.get("name", "PEI station")
-                        break
-        except Exception:
-            pass
-
-    if wind_speed is not None:
-        wind_note = ""
-        wind_status = "ok"
-        if wind_speed > 90:
-            wind_status = "warn"
-            wind_note = "Bridge closure threshold may be reached"
-        elif wind_speed > 120:
-            wind_status = "alert"
-            wind_note = "Extreme winds — bridge likely closed"
-        indicators_t2.append(indicator(
-            "Wind Speed (NW PEI)", f"{wind_speed:.0f}",
-            unit="km/h", status=wind_status, note=wind_note,
-            context=f"Station: {wind_station}",
-            source="Environment Canada", tier=2, date=GENERATED
-        ))
-    else:
-        indicators_t2.append(manual(
-            "Wind Speed (NW PEI)", "unavailable",
-            source="Environment Canada", tier=2
-        ))
-
-    # ── Heating oil / propane context ────────────────────────────────────
-    # PEI has high proportion of oil and propane heat — energy poverty indicator.
-    # No real-time PEI-specific price feed; use weekly manual tier.
+    # ── Heating oil / propane ────────────────────────────────────────────
     indicators_t3.append(manual(
         "Heating Oil Price", "check nrcan.gc.ca/energy/prices",
         source="NRCan / local suppliers", tier=3,
         note="PEI relies heavily on heating oil (~35% of households)"
     ))
-
     indicators_t3.append(manual(
         "Net Zero Initiatives", "see netzeronavigatorpei.com",
         source="GPEI Environment, Energy and Climate Action", tier=3
@@ -222,7 +428,9 @@ def scrape_energy():
             "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
             "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
             "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
+        },
+        # chart_data is consumed by index.html to render the energy panel
+        "chart_data": grid_chart_data,
     }
 
 
