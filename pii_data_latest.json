@@ -1,39 +1,56 @@
 {
-  "generated": "2026-04-04 — seeded manually",
-  "timestamp": "2026-04-04 — seeded manually",
+  "generated": "2026-04-04 23:20 UTC",
+  "timestamp": "2026-04-04 23:20 UTC",
   "source": "PEI Infrastructure Intelligence",
   "sectors": {
     "energy": {
-      "label": "Energy",
-      "chart_data": {
-        "load":       195.0,
-        "wind":        68.0,
-        "solar":        8.5,
-        "fossil":       0.0,
-        "nb_import":  118.5,
-        "cable_cap":  300,
-        "peak_record": 400,
-        "updated": "2026-04-04 — seeded manually (scraper will update)"
-      },
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
           "indicators": [
+            {
+              "label": "Island System Load",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable — check maritimeelectric.com",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
+            {
+              "label": "NB Cable Utilization",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
+            {
+              "label": "Wind Generation",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
             {
               "label": "Grid Status Index",
               "value": "Normal",
               "status": "ok",
               "context": "maritimeelectric.com/outages/outages/grid-status",
               "source": "Maritime Electric",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             },
             {
               "label": "Outage Customers",
-              "value": "< 100",
-              "unit": "customers affected",
-              "status": "ok",
-              "source": "Maritime Electric / poweroutage.com",
-              "tier": 1
+              "value": "check maritimeelectric.com",
+              "status": "manual",
+              "source": "Maritime Electric outage map",
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -45,15 +62,8 @@
               "value": "see summerside.ca/electric",
               "status": "manual",
               "source": "City of Summerside Electric Utility",
-              "tier": 2
-            },
-            {
-              "label": "Wind Speed (NW PEI)",
-              "value": "—",
-              "unit": "km/h",
-              "status": "manual",
-              "source": "Environment Canada",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -62,25 +72,28 @@
           "indicators": [
             {
               "label": "Heating Oil Price",
-              "value": "check nrcan.gc.ca",
+              "value": "check nrcan.gc.ca/energy/prices",
               "status": "manual",
               "note": "PEI relies heavily on heating oil (~35% of households)",
               "source": "NRCan / local suppliers",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             },
             {
               "label": "Net Zero Initiatives",
               "value": "see netzeronavigatorpei.com",
               "status": "manual",
               "source": "GPEI Environment, Energy and Climate Action",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "chart_data": null,
+      "label": "Energy"
     },
     "water": {
-      "label": "Water",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
@@ -91,8 +104,10 @@
               "unit": "active",
               "status": "ok",
               "context": "100% groundwater province",
+              "date": "2026-04-04 23:20 UTC",
               "source": "GPEI Environment, Energy and Climate Action",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -105,7 +120,8 @@
               "status": "manual",
               "note": "~50% of residents on central water; remainder on private wells",
               "source": "GPEI Environment, Energy and Climate Action",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -116,35 +132,45 @@
               "label": "Nitrate Risk (Agricultural)",
               "value": "ongoing monitoring",
               "status": "manual",
-              "note": "Potato agriculture — primary source of nitrate contamination",
+              "note": "Potato agriculture — primary source of nitrate contamination in aquifers",
               "source": "GPEI Environment, Energy and Climate Action",
-              "tier": 3
+              "tier": 3,
+              "muted": false
+            },
+            {
+              "label": "Coastal Water Quality",
+              "value": "see PEI Open Data",
+              "status": "manual",
+              "source": "data.princeedwardisland.ca",
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Water"
     },
     "health": {
-      "label": "Health",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
           "indicators": [
             {
               "label": "AQHI — Charlottetown",
-              "value": "—",
-              "unit": "/10",
+              "value": "see weather.gc.ca",
               "status": "manual",
               "source": "Environment and Climate Change Canada",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             },
             {
               "label": "QEH ED Wait Time",
-              "value": "see healthpei.ca",
+              "value": "see Health PEI",
               "status": "manual",
-              "note": "No public real-time ED feed",
-              "source": "Health PEI",
-              "tier": 1
+              "note": "No public real-time ED feed — check healthpei.ca",
+              "source": "Health PEI — Queen Elizabeth Hospital",
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -156,21 +182,25 @@
               "value": "see healthpei.ca",
               "status": "manual",
               "source": "Health PEI",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Prince County Hospital",
               "value": "see healthpei.ca",
               "status": "manual",
               "source": "Health PEI — Summerside",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Respiratory Illness Activity",
               "value": "Normal",
               "status": "ok",
+              "date": "2026-04-04 23:20 UTC",
               "source": "Health PEI",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -181,16 +211,17 @@
               "label": "Patients Without a Doctor",
               "value": "see Health PEI / CFPC",
               "status": "manual",
-              "note": "PEI has ongoing primary care challenges — lowest physician ratio in Canada",
+              "note": "PEI has ongoing primary care access challenges — lowest physician ratio in Canada",
               "source": "Health PEI",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Health"
     },
     "transport_logistics": {
-      "label": "Transport & Logistics",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
@@ -200,8 +231,10 @@
               "value": "Open",
               "status": "ok",
               "context": "12.9 km fixed link to NB",
+              "date": "2026-04-04 23:20 UTC",
               "source": "confederationbridge.com",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -210,11 +243,11 @@
           "indicators": [
             {
               "label": "Wind Gust (Bridge Area)",
-              "value": "—",
-              "unit": "km/h",
+              "value": "see weather.gc.ca",
               "status": "manual",
               "source": "Environment Canada",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Northumberland Ferry",
@@ -222,22 +255,27 @@
               "unit": "Wood Islands ↔ Pictou",
               "status": "ok",
               "context": "Seasonal alternate crossing (May–Dec)",
+              "date": "2026-04-04 23:20 UTC",
               "source": "ferries.ca",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Charlottetown Airport (YYG)",
-              "value": "see flightaware.com",
+              "value": "see flightaware.com/CYYG",
               "status": "manual",
               "source": "Charlottetown Airport Authority",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Island Road Conditions",
               "value": "Normal",
               "status": "ok",
+              "date": "2026-04-04 23:20 UTC",
               "source": "GPEI Transportation and Infrastructure",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -248,27 +286,30 @@
               "label": "Bridge Commercial Traffic",
               "value": "see confederationbridge.com",
               "status": "manual",
-              "note": "~1.5M vehicles annually — primary supply corridor",
+              "note": "~1.5M vehicles annually — primary supply corridor for food, fuel, goods",
               "source": "Strait Crossing Bridge Ltd",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Transport & Logistics"
     },
     "financial": {
-      "label": "Financial",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
           "indicators": [
             {
               "label": "CAD/USD",
-              "value": "—",
+              "value": "1.3900",
               "unit": "CAD per USD",
-              "status": "manual",
-              "source": "Bank of Canada",
-              "tier": 1
+              "status": "ok",
+              "date": "2026-04-04 23:20 UTC",
+              "source": "exchangerate-api.com",
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -277,19 +318,21 @@
           "indicators": [
             {
               "label": "PEI CPI (YoY)",
-              "value": "see statcan.gc.ca",
+              "value": "see statcan.gc.ca table 18-10-0004",
               "status": "manual",
-              "note": "Monthly release — PEI-specific price levels",
+              "note": "Monthly release — PEI CPI tracks island-specific price levels",
               "source": "Statistics Canada",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Housing Vacancy Rate",
-              "value": "see CMHC",
+              "value": "see CMHC Housing Market",
               "status": "manual",
               "note": "Charlottetown among lowest vacancy rates in Atlantic Canada",
               "source": "CMHC",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -298,26 +341,28 @@
           "indicators": [
             {
               "label": "Lobster Ex-Vessel Price",
-              "value": "see GPEI Fisheries",
+              "value": "see PEI Fisheries",
               "status": "manual",
-              "note": "PEI lobster — primary export commodity",
+              "note": "PEI lobster — primary export commodity; spring/fall seasons",
               "source": "GPEI Fisheries and Communities",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             },
             {
               "label": "Tourism Activity",
               "value": "see tourismpei.com",
               "status": "manual",
-              "note": "~$500M annually; highly seasonal (June–Sept)",
+              "note": "PEI tourism contributes ~$500M annually; highly seasonal (June–Sept)",
               "source": "Tourism PEI",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Financial"
     },
     "public_safety": {
-      "label": "Public Safety",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
@@ -328,15 +373,19 @@
               "unit": "active alerts",
               "status": "ok",
               "context": "ECCC public alerting",
+              "date": "2026-04-04 23:20 UTC",
               "source": "Environment and Climate Change Canada",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             },
             {
               "label": "PEI EMO Status",
               "value": "Normal",
               "status": "ok",
+              "date": "2026-04-04 23:20 UTC",
               "source": "PEI Emergency Measures Organization",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -347,15 +396,18 @@
               "label": "Coast Guard (Maritime Region)",
               "value": "see dfo-mpo.gc.ca",
               "status": "manual",
+              "note": "PEI surrounded by Northumberland Strait, Gulf of St. Lawrence, Gulf waters",
               "source": "Canadian Coast Guard — Maritimes Region",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "RCMP PEI — Public Notices",
               "value": "see rcmp-grc.gc.ca/pe",
               "status": "manual",
               "source": "RCMP L Division",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -364,36 +416,39 @@
           "indicators": [
             {
               "label": "Coastal Erosion Status",
-              "value": "ongoing monitoring",
+              "value": "see GPEI Environment",
               "status": "manual",
-              "note": "PEI: highest coastal erosion rates in Canada (~0.3m/yr avg)",
+              "note": "PEI: highest coastal erosion rates in Canada (~0.3m/yr avg). Storm surge risk.",
               "source": "GPEI Environment, Energy and Climate Action",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             },
             {
               "label": "Storm Surge Risk",
               "value": "see wateroffice.ec.gc.ca",
               "status": "manual",
+              "note": "Low-lying coastal areas at risk; Charlottetown harbour tide gauge",
               "source": "Environment Canada / Water Survey of Canada",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Public Safety"
     },
     "environment": {
-      "label": "Environment",
       "tiers": {
         "tier1": {
           "label": "Critical Infrastructure",
           "indicators": [
             {
               "label": "Temperature (Charlottetown)",
-              "value": "—",
-              "unit": "°C",
+              "value": "see weather.gc.ca",
               "status": "manual",
               "source": "Environment Canada",
-              "tier": 1
+              "tier": 1,
+              "muted": false
             }
           ]
         },
@@ -404,17 +459,19 @@
               "label": "Gulf SST Anomaly",
               "value": "see dfo-mpo.gc.ca",
               "status": "manual",
-              "note": "Warm Gulf SST amplifies storm systems and coastal erosion",
+              "note": "Warm Gulf SST amplifies storm systems and contributes to coastal erosion",
               "source": "DFO / Bedford Institute of Oceanography",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Drought Conditions",
-              "value": "see agr.gc.ca",
+              "value": "see agr.gc.ca/drought-watch",
               "status": "manual",
-              "note": "Drought affects potato yields — PEI's primary crop",
+              "note": "Drought affects potato crop yields — PEI's primary agricultural commodity",
               "source": "Agriculture and Agri-Food Canada",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -426,41 +483,45 @@
               "value": "see cwfis.cfs.nrcan.gc.ca",
               "status": "manual",
               "source": "Canadian Wildland Fire Information System",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Environment"
     },
     "food": {
-      "label": "Food & Prices",
       "tiers": {
         "tier2": {
           "label": "Secondary Systems",
           "indicators": [
             {
               "label": "Grocery Price Index (PEI)",
-              "value": "see statcan.gc.ca",
+              "value": "see statcan.gc.ca / GPEI",
               "status": "manual",
-              "note": "Island logistics premium: all non-local food crosses the bridge",
+              "note": "Island logistics premium: all non-local food crosses the Confederation Bridge",
               "source": "Statistics Canada",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Lobster Landings",
               "value": "see GPEI Fisheries",
               "status": "manual",
-              "note": "Spring: late April–June. Fall: August–October.",
+              "note": "Spring season: late April–June. Fall season: August–October. Key economic driver.",
               "source": "GPEI Fisheries and Communities",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             },
             {
               "label": "Potato Crop Status",
               "value": "see GPEI Agriculture",
               "status": "manual",
-              "note": "~100,000 acres annually — PEI's dominant crop",
+              "note": "~100,000 acres of potato production annually — PEI's dominant crop",
               "source": "GPEI Agriculture",
-              "tier": 2
+              "tier": 2,
+              "muted": false
             }
           ]
         },
@@ -472,11 +533,13 @@
               "value": "see foodbankspei.ca",
               "status": "manual",
               "source": "Food Banks PEI",
-              "tier": 3
+              "tier": 3,
+              "muted": false
             }
           ]
         }
-      }
+      },
+      "label": "Food & Prices"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
-  "generated": "2026-04-04 21:50 UTC",
-  "timestamp": "2026-04-04 21:50 UTC",
+  "generated": "2026-04-04 23:20 UTC",
+  "timestamp": "2026-04-04 23:20 UTC",
   "source": "PEI Infrastructure Intelligence",
   "sectors": {
     "energy": {
@@ -9,10 +9,36 @@
           "label": "Critical Infrastructure",
           "indicators": [
             {
+              "label": "Island System Load",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable — check maritimeelectric.com",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
+            {
+              "label": "NB Cable Utilization",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
+            {
+              "label": "Wind Generation",
+              "value": "unavailable",
+              "status": "manual",
+              "note": "GPEI API unavailable",
+              "source": "Maritime Electric via GPEI",
+              "tier": 1,
+              "muted": false
+            },
+            {
               "label": "Grid Status Index",
-              "value": "Load Shedding",
-              "status": "alert",
-              "note": "Rotating outages active — reduce non-essential consumption",
+              "value": "Normal",
+              "status": "ok",
               "context": "maritimeelectric.com/outages/outages/grid-status",
               "source": "Maritime Electric",
               "tier": 1,
@@ -36,14 +62,6 @@
               "value": "see summerside.ca/electric",
               "status": "manual",
               "source": "City of Summerside Electric Utility",
-              "tier": 2,
-              "muted": false
-            },
-            {
-              "label": "Wind Speed (NW PEI)",
-              "value": "unavailable",
-              "status": "manual",
-              "source": "Environment Canada",
               "tier": 2,
               "muted": false
             }
@@ -72,6 +90,7 @@
           ]
         }
       },
+      "chart_data": null,
       "label": "Energy"
     },
     "water": {
@@ -85,7 +104,7 @@
               "unit": "active",
               "status": "ok",
               "context": "100% groundwater province",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "GPEI Environment, Energy and Climate Action",
               "tier": 1,
               "muted": false
@@ -178,7 +197,7 @@
               "label": "Respiratory Illness Activity",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "Health PEI",
               "tier": 2,
               "muted": false
@@ -212,7 +231,7 @@
               "value": "Open",
               "status": "ok",
               "context": "12.9 km fixed link to NB",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "confederationbridge.com",
               "tier": 1,
               "muted": false
@@ -236,7 +255,7 @@
               "unit": "Wood Islands ↔ Pictou",
               "status": "ok",
               "context": "Seasonal alternate crossing (May–Dec)",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "ferries.ca",
               "tier": 2,
               "muted": false
@@ -253,7 +272,7 @@
               "label": "Island Road Conditions",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "GPEI Transportation and Infrastructure",
               "tier": 2,
               "muted": false
@@ -287,7 +306,7 @@
               "value": "1.3900",
               "unit": "CAD per USD",
               "status": "ok",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "exchangerate-api.com",
               "tier": 1,
               "muted": false
@@ -354,7 +373,7 @@
               "unit": "active alerts",
               "status": "ok",
               "context": "ECCC public alerting",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "Environment and Climate Change Canada",
               "tier": 1,
               "muted": false
@@ -363,7 +382,7 @@
               "label": "PEI EMO Status",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-04 21:50 UTC",
+              "date": "2026-04-04 23:20 UTC",
               "source": "PEI Emergency Measures Organization",
               "tier": 1,
               "muted": false
