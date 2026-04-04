@@ -1,0 +1,472 @@
+{
+  "generated": "2026-04-04 — seeded manually",
+  "timestamp": "2026-04-04 — seeded manually",
+  "source": "PEI Infrastructure Intelligence",
+  "sectors": {
+    "energy": {
+      "label": "Energy",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "Grid Status Index",
+              "value": "Normal",
+              "status": "ok",
+              "context": "maritimeelectric.com/outages/outages/grid-status",
+              "source": "Maritime Electric",
+              "tier": 1
+            },
+            {
+              "label": "Outage Customers",
+              "value": "< 100",
+              "unit": "customers affected",
+              "status": "ok",
+              "source": "Maritime Electric / poweroutage.com",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Summerside Utility Status",
+              "value": "see summerside.ca/electric",
+              "status": "manual",
+              "source": "City of Summerside Electric Utility",
+              "tier": 2
+            },
+            {
+              "label": "Wind Speed (NW PEI)",
+              "value": "—",
+              "unit": "km/h",
+              "status": "manual",
+              "source": "Environment Canada",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Heating Oil Price",
+              "value": "check nrcan.gc.ca",
+              "status": "manual",
+              "note": "PEI relies heavily on heating oil (~35% of households)",
+              "source": "NRCan / local suppliers",
+              "tier": 3
+            },
+            {
+              "label": "Net Zero Initiatives",
+              "value": "see netzeronavigatorpei.com",
+              "status": "manual",
+              "source": "GPEI Environment, Energy and Climate Action",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "water": {
+      "label": "Water",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "Boil Water Advisories",
+              "value": "0",
+              "unit": "active",
+              "status": "ok",
+              "context": "100% groundwater province",
+              "source": "GPEI Environment, Energy and Climate Action",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Central Water Systems",
+              "value": "see GPEI EECA",
+              "status": "manual",
+              "note": "~50% of residents on central water; remainder on private wells",
+              "source": "GPEI Environment, Energy and Climate Action",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Nitrate Risk (Agricultural)",
+              "value": "ongoing monitoring",
+              "status": "manual",
+              "note": "Potato agriculture — primary source of nitrate contamination",
+              "source": "GPEI Environment, Energy and Climate Action",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "health": {
+      "label": "Health",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "AQHI — Charlottetown",
+              "value": "—",
+              "unit": "/10",
+              "status": "manual",
+              "source": "Environment and Climate Change Canada",
+              "tier": 1
+            },
+            {
+              "label": "QEH ED Wait Time",
+              "value": "see healthpei.ca",
+              "status": "manual",
+              "note": "No public real-time ED feed",
+              "source": "Health PEI",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "QEH Capacity",
+              "value": "see healthpei.ca",
+              "status": "manual",
+              "source": "Health PEI",
+              "tier": 2
+            },
+            {
+              "label": "Prince County Hospital",
+              "value": "see healthpei.ca",
+              "status": "manual",
+              "source": "Health PEI — Summerside",
+              "tier": 2
+            },
+            {
+              "label": "Respiratory Illness Activity",
+              "value": "Normal",
+              "status": "ok",
+              "source": "Health PEI",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Patients Without a Doctor",
+              "value": "see Health PEI / CFPC",
+              "status": "manual",
+              "note": "PEI has ongoing primary care challenges — lowest physician ratio in Canada",
+              "source": "Health PEI",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "transport_logistics": {
+      "label": "Transport & Logistics",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "Confederation Bridge",
+              "value": "Open",
+              "status": "ok",
+              "context": "12.9 km fixed link to NB",
+              "source": "confederationbridge.com",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Wind Gust (Bridge Area)",
+              "value": "—",
+              "unit": "km/h",
+              "status": "manual",
+              "source": "Environment Canada",
+              "tier": 2
+            },
+            {
+              "label": "Northumberland Ferry",
+              "value": "Check schedule",
+              "unit": "Wood Islands ↔ Pictou",
+              "status": "ok",
+              "context": "Seasonal alternate crossing (May–Dec)",
+              "source": "ferries.ca",
+              "tier": 2
+            },
+            {
+              "label": "Charlottetown Airport (YYG)",
+              "value": "see flightaware.com",
+              "status": "manual",
+              "source": "Charlottetown Airport Authority",
+              "tier": 2
+            },
+            {
+              "label": "Island Road Conditions",
+              "value": "Normal",
+              "status": "ok",
+              "source": "GPEI Transportation and Infrastructure",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Bridge Commercial Traffic",
+              "value": "see confederationbridge.com",
+              "status": "manual",
+              "note": "~1.5M vehicles annually — primary supply corridor",
+              "source": "Strait Crossing Bridge Ltd",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "financial": {
+      "label": "Financial",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "CAD/USD",
+              "value": "—",
+              "unit": "CAD per USD",
+              "status": "manual",
+              "source": "Bank of Canada",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "PEI CPI (YoY)",
+              "value": "see statcan.gc.ca",
+              "status": "manual",
+              "note": "Monthly release — PEI-specific price levels",
+              "source": "Statistics Canada",
+              "tier": 2
+            },
+            {
+              "label": "Housing Vacancy Rate",
+              "value": "see CMHC",
+              "status": "manual",
+              "note": "Charlottetown among lowest vacancy rates in Atlantic Canada",
+              "source": "CMHC",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Lobster Ex-Vessel Price",
+              "value": "see GPEI Fisheries",
+              "status": "manual",
+              "note": "PEI lobster — primary export commodity",
+              "source": "GPEI Fisheries and Communities",
+              "tier": 3
+            },
+            {
+              "label": "Tourism Activity",
+              "value": "see tourismpei.com",
+              "status": "manual",
+              "note": "~$500M annually; highly seasonal (June–Sept)",
+              "source": "Tourism PEI",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "public_safety": {
+      "label": "Public Safety",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "Weather Alerts (PEI)",
+              "value": "0",
+              "unit": "active alerts",
+              "status": "ok",
+              "context": "ECCC public alerting",
+              "source": "Environment and Climate Change Canada",
+              "tier": 1
+            },
+            {
+              "label": "PEI EMO Status",
+              "value": "Normal",
+              "status": "ok",
+              "source": "PEI Emergency Measures Organization",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Coast Guard (Maritime Region)",
+              "value": "see dfo-mpo.gc.ca",
+              "status": "manual",
+              "source": "Canadian Coast Guard — Maritimes Region",
+              "tier": 2
+            },
+            {
+              "label": "RCMP PEI — Public Notices",
+              "value": "see rcmp-grc.gc.ca/pe",
+              "status": "manual",
+              "source": "RCMP L Division",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Coastal Erosion Status",
+              "value": "ongoing monitoring",
+              "status": "manual",
+              "note": "PEI: highest coastal erosion rates in Canada (~0.3m/yr avg)",
+              "source": "GPEI Environment, Energy and Climate Action",
+              "tier": 3
+            },
+            {
+              "label": "Storm Surge Risk",
+              "value": "see wateroffice.ec.gc.ca",
+              "status": "manual",
+              "source": "Environment Canada / Water Survey of Canada",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "environment": {
+      "label": "Environment",
+      "tiers": {
+        "tier1": {
+          "label": "Critical Infrastructure",
+          "indicators": [
+            {
+              "label": "Temperature (Charlottetown)",
+              "value": "—",
+              "unit": "°C",
+              "status": "manual",
+              "source": "Environment Canada",
+              "tier": 1
+            }
+          ]
+        },
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Gulf SST Anomaly",
+              "value": "see dfo-mpo.gc.ca",
+              "status": "manual",
+              "note": "Warm Gulf SST amplifies storm systems and coastal erosion",
+              "source": "DFO / Bedford Institute of Oceanography",
+              "tier": 2
+            },
+            {
+              "label": "Drought Conditions",
+              "value": "see agr.gc.ca",
+              "status": "manual",
+              "note": "Drought affects potato yields — PEI's primary crop",
+              "source": "Agriculture and Agri-Food Canada",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Fire Weather Index (PEI)",
+              "value": "see cwfis.cfs.nrcan.gc.ca",
+              "status": "manual",
+              "source": "Canadian Wildland Fire Information System",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    },
+    "food": {
+      "label": "Food & Prices",
+      "tiers": {
+        "tier2": {
+          "label": "Secondary Systems",
+          "indicators": [
+            {
+              "label": "Grocery Price Index (PEI)",
+              "value": "see statcan.gc.ca",
+              "status": "manual",
+              "note": "Island logistics premium: all non-local food crosses the bridge",
+              "source": "Statistics Canada",
+              "tier": 2
+            },
+            {
+              "label": "Lobster Landings",
+              "value": "see GPEI Fisheries",
+              "status": "manual",
+              "note": "Spring: late April–June. Fall: August–October.",
+              "source": "GPEI Fisheries and Communities",
+              "tier": 2
+            },
+            {
+              "label": "Potato Crop Status",
+              "value": "see GPEI Agriculture",
+              "status": "manual",
+              "note": "~100,000 acres annually — PEI's dominant crop",
+              "source": "GPEI Agriculture",
+              "tier": 2
+            }
+          ]
+        },
+        "tier3": {
+          "label": "Contextual Signals",
+          "indicators": [
+            {
+              "label": "Food Bank Usage (PEI)",
+              "value": "see foodbankspei.ca",
+              "status": "manual",
+              "source": "Food Banks PEI",
+              "tier": 3
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PEI Infrastructure Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* PEI palette: coastal slate + sea green + sandstone */
+  --bg:        #f2f0eb;
+  --surface:   #faf9f6;
+  --surface2:  #eae7e0;
+  --border:    rgba(60,70,80,0.12);
+  --border2:   rgba(60,70,80,0.22);
+
+  --text1:  #1c2630;
+  --text2:  #4a5a68;
+  --text3:  #8a9aa8;
+
+  --ok:     #2d6e5a;
+  --ok-bg:  #ddf0e9;
+
+  --warn:   #7a5015;
+  --warn-bg:#faecd8;
+
+  --alert:  #9b2c2c;
+  --alert-bg:#fce8e8;
+
+  --manual:    #7a8a94;
+  --manual-bg: #eae7e0;
+
+  --accent:  #1f5c8a;   /* PEI sea blue */
+  --accent2: #c4773a;   /* sandstone amber */
+
+  --tier1: #9b6b2a;
+  --tier2: #1f5c8a;
+  --tier3: #2d6e5a;
+
+  --font-head: 'Syne', sans-serif;
+  --font-body: 'Lora', Georgia, serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:       #141c22;
+    --surface:  #1c2630;
+    --surface2: #24303c;
+    --border:   rgba(180,200,220,0.10);
+    --border2:  rgba(180,200,220,0.20);
+
+    --text1: #e8edf0;
+    --text2: #8aa2b4;
+    --text3: #506070;
+
+    --ok:     #5db894;
+    --ok-bg:  #0e2820;
+
+    --warn:   #d4943a;
+    --warn-bg:#291a08;
+
+    --alert:  #e08080;
+    --alert-bg:#2a1010;
+
+    --manual:    #607080;
+    --manual-bg: #20282e;
+
+    --accent:  #6aaed6;
+    --accent2: #d4943a;
+
+    --tier1: #d4a050;
+    --tier2: #6aaed6;
+    --tier3: #5db894;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text1);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* subtle grain overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: .018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+a { color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: .9em; }
+a:hover { text-decoration: underline; }
+
+/* ── TOPBAR ─────────────────────────────────────────────────────────────── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border2);
+  padding: 0 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: 56px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* PEI wave mark */
+.topbar-mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.topbar-wordmark {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.topbar-title {
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text1);
+  line-height: 1;
+}
+
+.topbar-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  letter-spacing: .02em;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: pulse 2.8s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; transform:scale(1); }
+  50%      { opacity:.3; transform:scale(.85); }
+}
+
+#status-dot.warn  { background: var(--warn); animation: none; }
+#status-dot.alert { background: var(--alert); animation: pulse 1s infinite; }
+#status-dot.error { background: var(--alert); animation: none; opacity:.5; }
+
+/* ── MAIN ───────────────────────────────────────────────────────────────── */
+.main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem 1.75rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── SUMMARY BAR ────────────────────────────────────────────────────────── */
+.summary-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+
+.pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-weight: 500;
+  letter-spacing: .03em;
+}
+.pill-ok     { background: var(--ok-bg);     color: var(--ok);     }
+.pill-warn   { background: var(--warn-bg);   color: var(--warn);   }
+.pill-alert  { background: var(--alert-bg);  color: var(--alert);  }
+.pill-manual { background: var(--manual-bg); color: var(--manual); }
+.pill-error  { background: var(--alert-bg);  color: var(--alert); opacity:.7; }
+
+.summary-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  margin-left: auto;
+  letter-spacing: .02em;
+}
+
+/* ── ALERT BANNER ───────────────────────────────────────────────────────── */
+.alert-banner {
+  background: var(--alert-bg);
+  border-left: 3px solid var(--alert);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 14px;
+  margin-bottom: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--alert);
+}
+.alert-banner strong { font-weight: 600; font-family: var(--font-head); }
+
+/* ── SECTOR ─────────────────────────────────────────────────────────────── */
+.sector { margin-bottom: 2rem; }
+
+.sector-header {
+  font-family: var(--font-head);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sector-icon {
+  width: 16px; height: 16px;
+  opacity: .5;
+}
+
+/* ── TIER SUB-HEADERS ───────────────────────────────────────────────────── */
+.tier-subheader {
+  font-family: var(--font-head);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  padding: 5px 0 5px 12px;
+  margin: 16px 0 10px;
+  border-left: 2px solid var(--tier-color, var(--border2));
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tier-subheader:first-of-type { margin-top: 6px; }
+
+.tier-subheader .tier-desc {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: 0;
+  color: var(--text3);
+  text-transform: none;
+}
+
+.tier-1 { --tier-color: var(--tier1); }
+.tier-2 { --tier-color: var(--tier2); }
+.tier-3 { --tier-color: var(--tier3); }
+
+/* ── CARDS ──────────────────────────────────────────────────────────────── */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  gap: 8px;
+  overflow: visible;
+}
+.sector { overflow: visible; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 13px 14px 11px;
+  position: relative;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.card:hover {
+  border-color: var(--border2);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.card.is-alert {
+  border-color: var(--alert);
+  border-left-width: 3px;
+  background: var(--alert-bg);
+}
+.card.is-warn {
+  border-color: var(--warn);
+  border-left-width: 3px;
+  background: var(--warn-bg);
+}
+.card.is-manual { opacity: .62; }
+.card.is-muted  { opacity: .68; }
+.card.is-muted.is-alert {
+  border-color: var(--warn);
+  background: var(--warn-bg);
+}
+.card.is-muted.is-alert .card-value { color: var(--warn); }
+.card.is-muted.is-alert .card-note  { color: var(--warn); }
+.card.is-muted:hover  { opacity: 1; }
+.card.is-manual:hover { opacity: 1; }
+
+.card-dot {
+  position: absolute;
+  top: 12px; right: 12px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+.dot-ok     { background: var(--ok);     }
+.dot-warn   { background: var(--warn);   }
+.dot-alert  { background: var(--alert);  }
+.dot-manual { background: var(--manual); }
+.dot-error  { background: var(--alert); opacity:.5; }
+
+.card-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 5px;
+  padding-right: 18px;
+  letter-spacing: .02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-value {
+  font-family: var(--font-head);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  line-height: 1.1;
+  color: var(--text1);
+}
+.card.is-alert .card-value { color: var(--alert); }
+.card.is-warn  .card-value { color: var(--warn);  }
+.card.is-manual .card-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+.card-unit {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 2px;
+  letter-spacing: .03em;
+}
+.card-context {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text2);
+  margin-top: 4px;
+}
+.card-date {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 7px;
+  letter-spacing: .02em;
+}
+.card-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--warn);
+  margin-top: 5px;
+  line-height: 1.35;
+}
+.card.is-alert .card-note { color: var(--alert); }
+
+.card-tier {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .05em;
+  padding: 1px 6px;
+  border-radius: 2px;
+  margin-top: 6px;
+  background: rgba(31,92,138,0.10);
+  color: var(--accent);
+  opacity: .85;
+}
+
+/* ── TOOLTIP ────────────────────────────────────────────────────────────── */
+.card-info-btn {
+  position: absolute;
+  bottom: 10px; right: 11px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--text3);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .1s, color .1s;
+  z-index: 1;
+}
+.card:hover .card-info-btn { border-color: var(--accent); color: var(--accent); }
+
+.card-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 6px;
+  padding: 11px 14px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text2);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.13);
+  z-index: 100;
+  pointer-events: auto;
+  white-space: normal;
+}
+.tooltip-scraper { color: var(--text2); font-family: var(--font-mono); font-size: 11px; }
+.tooltip-divider { border: none; border-top: 1px solid var(--border); margin: 7px 0; }
+.tooltip-knowledge-title { font-family: var(--font-head); font-weight: 600; color: var(--text1); margin-bottom: 4px; font-size: 12px; }
+.tooltip-knowledge-body  { color: var(--text2); font-family: var(--font-body); }
+
+.card-tooltip.flip-down { bottom: auto; top: calc(100% + 7px); }
+.card-tooltip.nudge-left  { left: auto; right: -6px; transform: none; }
+.card-tooltip.nudge-right { left: -6px; transform: none; }
+
+/* ── LEGEND ─────────────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+  margin-bottom: 1.5rem;
+  align-items: center;
+  letter-spacing: .03em;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── BRIEF PANEL ────────────────────────────────────────────────────────── */
+.brief-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+.brief-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+.brief-title {
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text1);
+}
+.brief-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+}
+.brief-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-weight: 500;
+  letter-spacing: .04em;
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+.brief-content {
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--text1);
+}
+.brief-content h2 {
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin: 1rem 0 .4rem;
+}
+.brief-content h2:first-child { margin-top: 0; }
+.brief-content p  { margin-bottom: .75rem; }
+.brief-content ul { margin: .25rem 0 .75rem 1.25rem; }
+.brief-content li { margin-bottom: .3rem; }
+.brief-content em { color: var(--text2); font-style: italic; font-size: 12px; font-family: var(--font-mono); }
+.brief-escalated { border-color: var(--alert); }
+.brief-escalated .brief-badge { background: var(--alert-bg); color: var(--alert); }
+.brief-loading { font-family: var(--font-mono); font-size: 12px; color: var(--text3); font-style: italic; }
+
+/* ── SNAPSHOT BANNER ────────────────────────────────────────────────────── */
+.snapshot-banner {
+  display: none;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-bottom: 1rem;
+}
+.snapshot-banner a { color: var(--warn); text-decoration: underline; }
+
+/* ── FOOTER ─────────────────────────────────────────────────────────────── */
+.footer {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  border-top: 1px solid var(--border);
+  padding: 1rem 0 2.5rem;
+  margin-top: .5rem;
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  letter-spacing: .02em;
+}
+
+/* ── LOADING / ERROR ────────────────────────────────────────────────────── */
+#loading {
+  text-align: center;
+  padding: 5rem 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text3);
+  letter-spacing: .04em;
+}
+
+#error-msg {
+  background: var(--alert-bg);
+  border: 1px solid var(--alert);
+  border-radius: 6px;
+  padding: 1rem;
+  color: var(--alert);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin: 2rem 0;
+  display: none;
+}
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ─────────────────────────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-left">
+    <!-- PEI wave/wave mark -->
+    <svg class="topbar-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect width="32" height="32" rx="6" fill="var(--accent)" opacity=".12"/>
+      <path d="M4 22 Q8 16 12 20 Q16 24 20 18 Q24 12 28 16" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      <path d="M4 26 Q8 20 12 24 Q16 28 20 22 Q24 16 28 20" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".5"/>
+      <circle cx="16" cy="11" r="3.5" fill="var(--accent)" opacity=".8"/>
+      <path d="M13 11 Q16 7 19 11" stroke="var(--accent)" stroke-width="1" fill="none" opacity=".5"/>
+    </svg>
+    <div class="topbar-wordmark">
+      <span class="topbar-title">PEI Infrastructure Intelligence</span>
+      <span class="topbar-sub" id="topbar-sub">loading…</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span id="status-dot" class="pulse"></span>
+    <span id="status-label">live</span>
+  </div>
+</div>
+
+<div class="main">
+  <div id="snapshot-banner" class="snapshot-banner"></div>
+  <div id="loading">Fetching island data…</div>
+  <div id="error-msg"></div>
+  <div id="brief-panel" style="display:none"></div>
+
+  <div id="dashboard" style="display:none">
+    <div class="summary-bar" id="summary-bar"></div>
+    <div id="alert-banners"></div>
+
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot dot-ok"></span>normal</span>
+      <span class="legend-item"><span class="legend-dot dot-warn"></span>watch</span>
+      <span class="legend-item"><span class="legend-dot dot-alert"></span>alert</span>
+      <span class="legend-item"><span class="legend-dot dot-manual"></span>manual retrieval</span>
+    </div>
+
+    <div id="sectors"></div>
+
+    <div class="footer">
+      <span id="footer-sources">PEI Infrastructure Intelligence</span>
+      <span id="footer-run"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── URL parameter overrides ────────────────────────────────────────────────
+// ?data=pii_data_20260404.json  → frozen snapshot
+// ?brief=pii_brief_20260404.md  → specific brief
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const dataParam  = params.get("data");
+  const briefParam = params.get("brief");
+  const BASE = "https://sargjones.github.io/pei-infrastructure/";
+  window._PII_DATA_URL  = dataParam  ? BASE + dataParam  : BASE + "pii_data_latest.json";
+  window._PII_BRIEF_URL = briefParam ? BASE + briefParam : BASE + "pii_brief_latest.md";
+})();
+
+const DATA_URL  = window._PII_DATA_URL;
+const BRIEF_URL = window._PII_BRIEF_URL;
+
+const SECTOR_ORDER  = ["energy","water","health","transport_logistics","financial","public_safety","environment","food"];
+const SECTOR_LABELS = {
+  energy:             "Energy",
+  water:              "Water",
+  health:             "Health",
+  transport_logistics:"Transport & Logistics",
+  financial:          "Financial",
+  public_safety:      "Public Safety",
+  environment:        "Environment",
+  food:               "Food & Prices"
+};
+
+// Sector SVG icons (inline, minimal)
+const SECTOR_ICONS = {
+  energy: `<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M9 2L3 9h5l-1 5 6-7H8L9 2z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>`,
+  water:  `<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2C8 2 3 7.5 3 10.5a5 5 0 0010 0C13 7.5 8 2 8 2z" stroke="currentColor" stroke-width="1.2"/></svg>`,
+  health: `<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 14s-6-4.5-6-8a4 4 0 018 0 4 4 0 018 0c0 3.5-6 8-6 8z" stroke="currentColor" stroke-width="1.2"/></svg>`,
+  transport_logistics:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="6" width="9" height="6" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M11 9h2l1 2v1h-3V9z" stroke="currentColor" stroke-width="1.2"/><circle cx="5" cy="13" r="1.2" stroke="currentColor" stroke-width="1"/><circle cx="12" cy="13" r="1.2" stroke="currentColor" stroke-width="1"/></svg>`,
+  financial:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2v1m0 10v1M5 8H2m12 0h-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/></svg>`,
+  public_safety:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2L3 4.5V9c0 3 2.5 5 5 6 2.5-1 5-3 5-6V4.5L8 2z" stroke="currentColor" stroke-width="1.2"/></svg>`,
+  environment:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 14V8m0 0C8 5 4 3 2 4c2 0 4 2 6 4zm0 0c0-3 4-5 6-4-2 0-4 2-6 4z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  food:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M6 2v4a2 2 0 004 0V2m-2 6v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`
+};
+
+// ── Static knowledge layer ─────────────────────────────────────────────────
+// PEI-specific knowledge entries keyed by lowercase substring of indicator name
+const CARD_KNOWLEDGE = {
+  "grid status": {
+    title: "Maritime Electric grid",
+    body: "Maritime Electric is PEI's primary electricity utility, serving ~86,000 customers across the island (excluding Summerside, which has its own municipal utility). " +
+          "The vast majority of PEI's electricity is imported from New Brunswick via four subsea cables crossing the Northumberland Strait. " +
+          "On-island generation includes wind energy and backup combustion turbines. " +
+          "In January 2026, Maritime Electric launched a public Grid Status Index tool following capacity concerns during winter peaks. " +
+          "Load shedding (rotating outages) is a last-resort measure when demand exceeds available supply. Peak demand periods: 6–10am and 4–9pm, highest in January–February."
+  },
+  "outage customers": {
+    title: "Maritime Electric outage tracking",
+    body: "Maritime Electric publishes an outage map updated every 15 minutes at maritimeelectric.com/outages. " +
+          "Total PEI customer base: ~86,000. Summerside (~9,000 customers) is served separately by the Summerside Electric Utility. " +
+          "Major storm events have caused island-wide outages — post-Fiona (2022) saw tens of thousands without power for days. " +
+          "The utility maintains mutual aid agreements with Newfoundland Power, Fortis Ontario, and Fortis Alberta for large storm response."
+  },
+  "wind generation": {
+    title: "PEI wind energy",
+    body: "PEI has one of the highest proportions of wind energy per capita in Canada. The island has significant installed wind capacity, particularly in eastern and central PEI. " +
+          "Wind energy is non-dispatchable and variable — surplus is exported to New Brunswick via the subsea interconnects when available. " +
+          "Key installations include the North Cape wind farm area and farms near Summerside. " +
+          "The provincial government's energy goals target increasing renewable generation as part of the Climate Change Action Plan."
+  },
+  "confederation bridge": {
+    title: "Confederation Bridge",
+    body: "The Confederation Bridge (opened 1997) is the primary fixed link connecting PEI to New Brunswick at Cape Jourimain. " +
+          "Length: 12.9 km — the longest bridge over ice-covered waters in the world. " +
+          "The bridge carries approximately 1.5 million vehicles annually and is the island's critical land-based supply corridor. " +
+          "Closures due to high winds (typically gusts >90 km/h) are operationally significant — commercial trucking is halted, affecting food supply chains and retail restocking. " +
+          "Bridge operator: Strait Crossing Bridge Limited under federal concession. Wind closure threshold: variable by vehicle type."
+  },
+  "ferry": {
+    title: "Northumberland Ferries / Wood Islands",
+    body: "Northumberland Ferries operates the Wood Islands (PEI) to Pictou (Nova Scotia) ferry route, providing a seasonal alternate crossing. " +
+          "Typically operates May through December. Crossing time: ~75 minutes. " +
+          "The ferry provides redundancy when the Confederation Bridge is closed and serves eastern PEI communities. " +
+          "Vessel capacity: several hundred vehicles per sailing. Service frequency varies by season and demand."
+  },
+  "charlottetown airport": {
+    title: "Charlottetown Airport (YYG)",
+    body: "Charlottetown Airport (IATA: YYG) serves approximately 500,000 passengers annually. " +
+          "Regular direct service to Toronto (Air Canada/Porter), Ottawa, Montreal, Halifax, and seasonal routes. " +
+          "The airport is PEI's only commercial airport and handles significant seasonal tourism peaks June–September. " +
+          "Operations are managed by the Charlottetown Airport Authority. "
+  },
+  "water quality": {
+    title: "PEI drinking water",
+    body: "PEI relies entirely on groundwater — it is the only Canadian province with no surface water treatment plants. " +
+          "Approximately 50% of residents use central water systems; the remainder rely on private wells. " +
+          "The primary water quality concern is nitrates from agricultural runoff (potatoes are the dominant crop). " +
+          "Regulated under the Water Supply System and Wastewater Treatment System Regulations by the Department of Environment, Energy and Climate Action."
+  },
+  "qeh": {
+    title: "Queen Elizabeth Hospital (QEH)",
+    body: "The QEH in Charlottetown is PEI's only tertiary care hospital and primary acute care facility for the province's ~170,000 residents. " +
+          "Services include emergency, surgery, ICU, oncology, cardiology, and obstetrics. " +
+          "Operated by Health PEI. The hospital regularly experiences capacity pressure, particularly in winter flu season. " +
+          "PEI has the lowest physician-per-capita ratio among provinces and ongoing primary care access challenges."
+  },
+  "health pei": {
+    title: "Health PEI system",
+    body: "Health PEI is the provincial health authority managing all public health services on the island. " +
+          "Facilities include the Queen Elizabeth Hospital (Charlottetown), Prince County Hospital (Summerside), Kings County Memorial Hospital (Montague), and several community hospitals. " +
+          "PEI has ~170,000 residents and faces ongoing physician and nurse recruitment challenges common to rural Atlantic Canada."
+  },
+  "emergency alert": {
+    title: "PEI Emergency Measures",
+    body: "PEI Emergency Measures Organization (EMO) coordinates provincial emergency response under the Emergency Measures Act. " +
+          "The province is subject to significant weather events: post-tropical systems (Fiona 2022), nor'easters, ice storms, and coastal flooding driven by sea level rise. " +
+          "Emergency alerts are broadcast via Alert Ready (national system). " +
+          "PEI's coastal geography (1,100+ km of shoreline) makes storm surge and erosion ongoing infrastructure risks."
+  },
+  "food price": {
+    title: "PEI food pricing context",
+    body: "PEI's food prices are influenced by its island geography — nearly all non-agricultural goods must cross the Confederation Bridge or arrive by ferry/air, adding transport costs. " +
+          "The island is a major producer of potatoes, beef, and seafood (lobster, mussels, oysters), but most processed and packaged foods are imported. " +
+          "Statistics Canada's CPI for PEI tracks monthly. " +
+          "Bridge closures can cause short-term supply disruptions for perishables."
+  },
+  "housing": {
+    title: "PEI housing market",
+    body: "PEI experienced significant housing price escalation 2020–2023 driven by interprovincial in-migration and short-term rental conversion. " +
+          "Charlottetown has among the lowest rental vacancy rates in Atlantic Canada. " +
+          "The provincial government has implemented measures including short-term rental regulations and the PEI Housing Corporation programs. " +
+          "Average home prices remain well below mainland Canadian cities but have roughly doubled since 2018."
+  },
+  "rcmp": {
+    title: "RCMP PEI Division",
+    body: "The Royal Canadian Mounted Police (RCMP) L Division provides provincial and municipal policing for most of PEI, with the exception of Charlottetown (municipal police) and Summerside (municipal police). " +
+          "PEI has one of the lowest crime rates in Canada by most indices."
+  },
+  "sea level": {
+    title: "PEI coastal erosion & sea level",
+    body: "Prince Edward Island faces the highest coastal erosion rates in Canada — the red sandstone shoreline erodes an average of 0.3 metres per year in many areas, with some locations losing 1–2 metres annually. " +
+          "Sea level rise projections for the Northumberland Strait add to storm surge risk. " +
+          "The province has a Coastal Risk and Adaptation Initiative. Infrastructure near low-lying coasts (causeways, roads, summer communities) faces long-term risk. " +
+          "Climate attribution: warmer Gulf of St. Lawrence waters are intensifying storm systems affecting the region."
+  }
+};
+
+// ── Rendering helpers ─────────────────────────────────────────────────────
+function statusClass(s) {
+  if (!s) return "";
+  const m = { alert:"is-alert", warn:"is-warn", manual:"is-manual", error:"is-manual" };
+  return m[s] || "";
+}
+function dotClass(s) {
+  const m = { ok:"dot-ok", warn:"dot-warn", alert:"dot-alert", manual:"dot-manual", error:"dot-error" };
+  return "card-dot " + (m[s] || "dot-ok");
+}
+function pillClass(s) {
+  const m = { ok:"pill-ok", warn:"pill-warn", alert:"pill-alert", manual:"pill-manual", error:"pill-error" };
+  return "pill " + (m[s] || "pill-ok");
+}
+
+function findKnowledge(label) {
+  if (!label) return null;
+  const lc = label.toLowerCase();
+  for (const k of Object.keys(CARD_KNOWLEDGE)) {
+    if (lc.includes(k)) return CARD_KNOWLEDGE[k];
+  }
+  return null;
+}
+
+function buildCard(indicator) {
+  const st = indicator.status || "ok";
+  const cls = ["card", statusClass(st), indicator.muted ? "is-muted" : ""].filter(Boolean).join(" ");
+  const kn = findKnowledge(indicator.label);
+
+  const noteHtml = indicator.note
+    ? `<div class="card-note">${escHtml(indicator.note)}</div>` : "";
+  const contextHtml = indicator.context
+    ? `<div class="card-context">${escHtml(indicator.context)}</div>` : "";
+  const dateHtml = indicator.date
+    ? `<div class="card-date">${escHtml(indicator.date)}</div>` : "";
+  const tierHtml = indicator.tier
+    ? `<span class="card-tier">tier ${indicator.tier}</span>` : "";
+
+  // tooltip content
+  let tooltipHtml = "";
+  if (indicator.source || kn) {
+    const scraperPart = indicator.source
+      ? `<div class="tooltip-scraper">Source: ${escHtml(indicator.source)}</div>` : "";
+    const knPart = kn
+      ? `<hr class="tooltip-divider"><div class="tooltip-knowledge-title">${escHtml(kn.title)}</div><div class="tooltip-knowledge-body">${escHtml(kn.body)}</div>`
+      : "";
+    tooltipHtml = `<div class="card-info-btn">i</div>
+      <div class="card-tooltip">${scraperPart}${knPart}</div>`;
+  }
+
+  const valueDisplay = indicator.status === "manual"
+    ? escHtml(indicator.value || "manual")
+    : escHtml(indicator.value || "—");
+
+  return `<div class="${cls}">
+    <div class="${dotClass(st)}"></div>
+    <div class="card-label">${escHtml(indicator.label || "")}</div>
+    <div class="card-value">${valueDisplay}</div>
+    ${indicator.unit ? `<div class="card-unit">${escHtml(indicator.unit)}</div>` : ""}
+    ${contextHtml}
+    ${noteHtml}
+    ${dateHtml}
+    ${tierHtml}
+    ${tooltipHtml}
+  </div>`;
+}
+
+function escHtml(s) {
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
+}
+
+// ── Render dashboard ──────────────────────────────────────────────────────
+function renderDashboard(data) {
+  // Summary bar
+  const counts = { ok:0, warn:0, alert:0, manual:0, error:0 };
+  const allIndicators = [];
+  for (const sector of Object.values(data.sectors || {})) {
+    for (const tier of Object.values(sector.tiers || {})) {
+      for (const ind of (tier.indicators || [])) {
+        allIndicators.push(ind);
+        counts[ind.status || "ok"] = (counts[ind.status || "ok"] || 0) + 1;
+      }
+    }
+  }
+
+  const summaryEl = document.getElementById("summary-bar");
+  summaryEl.innerHTML = Object.entries(counts)
+    .filter(([,v]) => v > 0)
+    .map(([k,v]) => `<span class="${pillClass(k)}">${v} ${k}</span>`)
+    .join("") +
+    `<span class="summary-date">${data.generated || data.timestamp || ""}</span>`;
+
+  // Alert banners
+  const alertBanners = document.getElementById("alert-banners");
+  alertBanners.innerHTML = "";
+  for (const ind of allIndicators) {
+    if (ind.status === "alert" && ind.banner) {
+      alertBanners.innerHTML += `<div class="alert-banner">
+        <strong>${escHtml(ind.label)}</strong> — ${escHtml(ind.banner)}
+      </div>`;
+    }
+  }
+
+  // Topbar status
+  const hasAlert = counts.alert > 0;
+  const hasWarn  = counts.warn > 0;
+  const dot = document.getElementById("status-dot");
+  const lbl = document.getElementById("status-label");
+  if (hasAlert) { dot.className = "alert"; lbl.textContent = "alert"; }
+  else if (hasWarn) { dot.className = "warn"; lbl.textContent = "watch"; }
+  else { dot.className = "pulse"; lbl.textContent = "live"; }
+
+  document.getElementById("topbar-sub").textContent =
+    data.generated || data.timestamp || "live";
+
+  // Sectors
+  const sectorsEl = document.getElementById("sectors");
+  sectorsEl.innerHTML = "";
+
+  const sectorOrder = SECTOR_ORDER.filter(k => data.sectors && data.sectors[k]);
+  const extraSectors = Object.keys(data.sectors || {}).filter(k => !SECTOR_ORDER.includes(k));
+
+  for (const sectorKey of [...sectorOrder, ...extraSectors]) {
+    const sector = data.sectors[sectorKey];
+    if (!sector) continue;
+
+    const label = SECTOR_LABELS[sectorKey] || sectorKey;
+    const icon  = SECTOR_ICONS[sectorKey] || "";
+
+    let html = `<div class="sector">
+      <div class="sector-header">${icon}${escHtml(label)}</div>`;
+
+    const tiers = sector.tiers || {};
+    const tierKeys = Object.keys(tiers).sort();
+
+    for (const tierKey of tierKeys) {
+      const tier = tiers[tierKey];
+      if (!tier || !tier.indicators || tier.indicators.length === 0) continue;
+
+      const tierNum = tierKey.replace(/\D/g, "") || tierKey;
+      const tierDescs = {
+        "1": "critical infrastructure",
+        "2": "secondary systems",
+        "3": "contextual signals"
+      };
+      const desc = tier.label || tierDescs[tierNum] || "";
+
+      html += `<div class="tier-subheader tier-${tierNum}">
+        Tier ${escHtml(tierNum)}
+        ${desc ? `<span class="tier-desc">${escHtml(desc)}</span>` : ""}
+      </div>
+      <div class="cards">
+        ${tier.indicators.map(buildCard).join("")}
+      </div>`;
+    }
+
+    html += `</div>`;
+    sectorsEl.innerHTML += html;
+  }
+
+  // Footer
+  const sources = [...new Set(allIndicators.map(i => i.source).filter(Boolean))];
+  document.getElementById("footer-sources").textContent =
+    "PEI Infrastructure Intelligence" + (sources.length ? " · " + sources.slice(0,4).join(", ") : "");
+  document.getElementById("footer-run").textContent =
+    "Run: " + (data.generated || data.timestamp || "—");
+
+  document.getElementById("dashboard").style.display = "block";
+
+  // Tooltip positioning
+  requestAnimationFrame(positionTooltips);
+}
+
+// ── Tooltip positioning ───────────────────────────────────────────────────
+function positionTooltips() {
+  document.querySelectorAll(".card").forEach(card => {
+    const btn = card.querySelector(".card-info-btn");
+    const tip = card.querySelector(".card-tooltip");
+    if (!btn || !tip) return;
+
+    btn.addEventListener("mouseenter", () => {
+      tip.style.display = "block";
+      const r = tip.getBoundingClientRect();
+      tip.classList.toggle("flip-down", r.top < 0);
+      tip.classList.toggle("nudge-left", r.right > window.innerWidth - 8);
+      tip.classList.toggle("nudge-right", r.left < 8);
+    });
+    btn.addEventListener("mouseleave", e => {
+      if (!tip.contains(e.relatedTarget)) tip.style.display = "none";
+    });
+    tip.addEventListener("mouseleave", e => {
+      if (e.relatedTarget !== btn) tip.style.display = "none";
+    });
+  });
+}
+
+// ── Brief panel ───────────────────────────────────────────────────────────
+async function loadBrief() {
+  const panel = document.getElementById("brief-panel");
+  panel.style.display = "block";
+  panel.innerHTML = `<div class="brief-panel"><div class="brief-loading">Loading intelligence brief…</div></div>`;
+
+  try {
+    const res = await fetch(BRIEF_URL, { cache: "no-store" });
+    if (!res.ok) { panel.style.display = "none"; return; }
+    const md = await res.text();
+    const lines = md.split("\n");
+    const title = (lines.find(l => l.startsWith("# ")) || "").replace(/^# /, "").trim()
+      || "Weekly Intelligence Brief";
+    const dateMatch = md.match(/\*\*Week of ([^*]+)\*\*/);
+    const date = dateMatch ? dateMatch[1].trim() : "";
+    const escalated = /escalat/i.test(md);
+
+    // Simple markdown → HTML
+    let body = lines
+      .filter(l => !l.startsWith("# "))
+      .join("\n")
+      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+      .replace(/\n\n+/g, "\n")
+      .split("\n")
+      .filter(l => l && !l.startsWith("<h2>") && !l.startsWith("<ul>") && !l.startsWith("<li>") && !l.startsWith("</ul>"))
+      .map(l => `<p>${l}</p>`)
+      .join("");
+
+    // Re-insert headers and lists
+    body = lines
+      .filter(l => !l.startsWith("# "))
+      .join("\n")
+      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/^- (.+)$/gm, "<li>$1</li>")
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Wrap bare lines in <p>
+    const bodyHtml = body.split("\n").map(l => {
+      if (!l.trim()) return "";
+      if (l.startsWith("<h2>") || l.startsWith("<li>")) return l;
+      return `<p>${l}</p>`;
+    }).join("\n").replace(/(<li>[^<]*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`);
+
+    panel.innerHTML = `<div class="brief-panel ${escalated ? 'brief-escalated' : ''}">
+      <div class="brief-header">
+        <span class="brief-title">${escHtml(title)}</span>
+        <span class="brief-date">${escHtml(date)}</span>
+        ${escalated ? '<span class="brief-badge">escalated</span>' : '<span class="brief-badge" style="background:var(--ok-bg);color:var(--ok)">current</span>'}
+      </div>
+      <div class="brief-content">${bodyHtml}</div>
+    </div>`;
+  } catch {
+    panel.style.display = "none";
+  }
+}
+
+// ── Data fetch ────────────────────────────────────────────────────────────
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const isSnapshot = params.has("data");
+
+  if (isSnapshot) {
+    const banner = document.getElementById("snapshot-banner");
+    banner.style.display = "block";
+    banner.innerHTML = `📌 Viewing archived snapshot. <a href="/">Return to live dashboard →</a>`;
+  }
+
+  // Load brief in parallel
+  loadBrief();
+
+  try {
+    const res = await fetch(DATA_URL, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    document.getElementById("loading").style.display = "none";
+    renderDashboard(data);
+  } catch (err) {
+    document.getElementById("loading").style.display = "none";
+    const errEl = document.getElementById("error-msg");
+    errEl.style.display = "block";
+    errEl.textContent = `Could not load data: ${err.message}. The scraper may be mid-run or the data file is unavailable.`;
+    document.getElementById("status-dot").className = "error";
+    document.getElementById("status-label").textContent = "error";
+  }
+}
+
+init();
+</script>
+</body>
+</html>
