@@ -9,35 +9,35 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Lora:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* PEI palette: coastal slate + sea green + sandstone */
-  --bg:        #f2f0eb;
-  --surface:   #faf9f6;
-  --surface2:  #eae7e0;
-  --border:    rgba(60,70,80,0.12);
-  --border2:   rgba(60,70,80,0.22);
+  /* PEI palette: lighthouse beach — sky blue, sea foam, warm white, sandy gold */
+  --bg:        #deeef7;          /* open sky blue */
+  --surface:   #f0f8fd;          /* sea foam white */
+  --surface2:  #c8dff0;          /* deeper coastal blue */
+  --border:    rgba(30,80,130,0.13);
+  --border2:   rgba(30,80,130,0.26);
 
-  --text1:  #1c2630;
-  --text2:  #4a5a68;
-  --text3:  #8a9aa8;
+  --text1:  #0f2335;             /* deep navy */
+  --text2:  #2c5270;             /* slate ocean */
+  --text3:  #6a9ab8;             /* faded blue */
 
-  --ok:     #2d6e5a;
-  --ok-bg:  #ddf0e9;
+  --ok:     #1a7a52;
+  --ok-bg:  #d0f0e4;
 
-  --warn:   #7a5015;
-  --warn-bg:#faecd8;
+  --warn:   #8a5800;
+  --warn-bg:#fdefd4;
 
-  --alert:  #9b2c2c;
-  --alert-bg:#fce8e8;
+  --alert:  #a02828;
+  --alert-bg:#fde8e8;
 
-  --manual:    #7a8a94;
-  --manual-bg: #eae7e0;
+  --manual:    #5a82a0;
+  --manual-bg: #d0e6f5;
 
-  --accent:  #1f5c8a;   /* PEI sea blue */
-  --accent2: #c4773a;   /* sandstone amber */
+  --accent:  #1558a0;            /* lighthouse signal blue */
+  --accent2: #c47c20;            /* warm beacon gold */
 
-  --tier1: #9b6b2a;
-  --tier2: #1f5c8a;
-  --tier3: #2d6e5a;
+  --tier1: #a06018;              /* sandy amber */
+  --tier2: #1558a0;              /* ocean blue */
+  --tier3: #1a7a52;              /* sea green */
 
   --font-head: 'Syne', sans-serif;
   --font-body: 'Lora', Georgia, serif;
@@ -46,34 +46,34 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg:       #141c22;
-    --surface:  #1c2630;
-    --surface2: #24303c;
-    --border:   rgba(180,200,220,0.10);
-    --border2:  rgba(180,200,220,0.20);
+    --bg:       #0d1e2e;
+    --surface:  #142436;
+    --surface2: #1c3048;
+    --border:   rgba(140,190,230,0.12);
+    --border2:  rgba(140,190,230,0.24);
 
-    --text1: #e8edf0;
-    --text2: #8aa2b4;
-    --text3: #506070;
+    --text1: #ddeeff;
+    --text2: #7aaecf;
+    --text3: #3a6888;
 
-    --ok:     #5db894;
-    --ok-bg:  #0e2820;
+    --ok:     #4dc896;
+    --ok-bg:  #082818;
 
-    --warn:   #d4943a;
-    --warn-bg:#291a08;
+    --warn:   #e0a030;
+    --warn-bg:#281800;
 
-    --alert:  #e08080;
-    --alert-bg:#2a1010;
+    --alert:  #e07070;
+    --alert-bg:#280808;
 
-    --manual:    #607080;
-    --manual-bg: #20282e;
+    --manual:    #4a7898;
+    --manual-bg: #182838;
 
-    --accent:  #6aaed6;
-    --accent2: #d4943a;
+    --accent:  #5aaee8;
+    --accent2: #e0a030;
 
-    --tier1: #d4a050;
-    --tier2: #6aaed6;
-    --tier3: #5db894;
+    --tier1: #d4a040;
+    --tier2: #5aaee8;
+    --tier3: #4dc896;
   }
 }
 
@@ -83,38 +83,49 @@ body {
   font-family: var(--font-body);
   background: var(--bg);
   color: var(--text1);
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-/* subtle grain overlay */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: .018;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
+  font-size: 16px;
+  line-height: 1.65;
+  background-image:
+    radial-gradient(ellipse 100% 50% at 50% 0%, rgba(255,255,255,0.40) 0%, transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='30'%3E%3Cpath d='M0 18 Q15 8 30 18 Q45 28 60 18 Q75 8 90 18 Q105 28 120 18' fill='none' stroke='rgba(255,255,255,0.20)' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-size: auto, 120px 30px;
+  background-attachment: fixed, fixed;
+  min-height: 100vh;
 }
 
 a { color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: .9em; }
 a:hover { text-decoration: underline; }
 
+/* ── LIGHTHOUSE STRIPE ──────────────────────────────────────────────────── */
+/* A thin red-and-white lighthouse band across the very top */
+.lighthouse-stripe {
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    #c0272d 0px, #c0272d 24px,
+    #ffffff 24px, #ffffff 48px
+  );
+  position: sticky;
+  top: 0;
+  z-index: 21;
+}
+
 /* ── TOPBAR ─────────────────────────────────────────────────────────────── */
 .topbar {
-  background: var(--surface);
+  background: rgba(240, 248, 253, 0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border2);
-  padding: 0 1.75rem;
+  padding: 0 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  height: 56px;
+  height: 60px;
   position: sticky;
-  top: 0;
+  top: 6px;
   z-index: 20;
+  box-shadow: 0 2px 16px rgba(15,35,53,0.08);
 }
 
 .topbar-left {
@@ -138,9 +149,9 @@ a:hover { text-decoration: underline; }
 
 .topbar-title {
   font-family: var(--font-head);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: .04em;
+  letter-spacing: .05em;
   text-transform: uppercase;
   color: var(--text1);
   line-height: 1;
@@ -148,7 +159,7 @@ a:hover { text-decoration: underline; }
 
 .topbar-sub {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text3);
   letter-spacing: .02em;
 }
@@ -198,9 +209,9 @@ a:hover { text-decoration: underline; }
 
 .pill {
   font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 3px;
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
   font-weight: 500;
   letter-spacing: .03em;
 }
@@ -236,33 +247,33 @@ a:hover { text-decoration: underline; }
 
 .sector-header {
   font-family: var(--font-head);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
-  color: var(--text3);
+  color: var(--text2);
   margin-bottom: 10px;
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border2);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .sector-icon {
-  width: 16px; height: 16px;
-  opacity: .5;
+  width: 17px; height: 17px;
+  opacity: .55;
 }
 
 /* ── TIER SUB-HEADERS ───────────────────────────────────────────────────── */
 .tier-subheader {
   font-family: var(--font-head);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: .08em;
   text-transform: uppercase;
   padding: 5px 0 5px 12px;
-  margin: 16px 0 10px;
+  margin: 18px 0 10px;
   border-left: 2px solid var(--tier-color, var(--border2));
   color: var(--text2);
   display: flex;
@@ -273,7 +284,7 @@ a:hover { text-decoration: underline; }
 
 .tier-subheader .tier-desc {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   font-style: italic;
   letter-spacing: 0;
@@ -288,8 +299,8 @@ a:hover { text-decoration: underline; }
 /* ── CARDS ──────────────────────────────────────────────────────────────── */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
   overflow: visible;
 }
 .sector { overflow: visible; }
@@ -297,15 +308,17 @@ a:hover { text-decoration: underline; }
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 13px 14px 11px;
+  border-radius: 8px;
+  padding: 14px 16px 12px;
   position: relative;
   transition: border-color .15s, box-shadow .15s;
+  /* ensure nothing clips out of the card */
+  overflow: visible;
 }
 
 .card:hover {
   border-color: var(--border2);
-  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+  box-shadow: 0 3px 16px rgba(15,35,53,0.10);
 }
 
 .card.is-alert {
@@ -318,8 +331,8 @@ a:hover { text-decoration: underline; }
   border-left-width: 3px;
   background: var(--warn-bg);
 }
-.card.is-manual { opacity: .62; }
-.card.is-muted  { opacity: .68; }
+.card.is-manual { opacity: .65; }
+.card.is-muted  { opacity: .70; }
 .card.is-muted.is-alert {
   border-color: var(--warn);
   background: var(--warn-bg);
@@ -331,8 +344,8 @@ a:hover { text-decoration: underline; }
 
 .card-dot {
   position: absolute;
-  top: 12px; right: 12px;
-  width: 7px; height: 7px;
+  top: 13px; right: 13px;
+  width: 8px; height: 8px;
   border-radius: 50%;
 }
 .dot-ok     { background: var(--ok);     }
@@ -343,76 +356,84 @@ a:hover { text-decoration: underline; }
 
 .card-label {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text2);
-  margin-bottom: 5px;
-  padding-right: 18px;
+  margin-bottom: 6px;
+  padding-right: 20px;
   letter-spacing: .02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* allow wrapping — no more runoff */
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
 }
 
 .card-value {
   font-family: var(--font-head);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -.02em;
-  line-height: 1.1;
+  line-height: 1.15;
   color: var(--text1);
+  word-break: break-word;
 }
 .card.is-alert .card-value { color: var(--alert); }
 .card.is-warn  .card-value { color: var(--warn);  }
 .card.is-manual .card-value {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--text3);
   margin-top: 3px;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.4;
 }
 
 .card-unit {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text3);
-  margin-top: 2px;
+  margin-top: 3px;
   letter-spacing: .03em;
 }
 .card-context {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
   font-style: italic;
   color: var(--text2);
   margin-top: 4px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 .card-date {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text3);
-  margin-top: 7px;
+  margin-top: 8px;
   letter-spacing: .02em;
 }
 .card-note {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--warn);
-  margin-top: 5px;
-  line-height: 1.35;
+  margin-top: 6px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 .card.is-alert .card-note { color: var(--alert); }
 
 .card-tier {
   display: inline-block;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
   letter-spacing: .05em;
-  padding: 1px 6px;
-  border-radius: 2px;
-  margin-top: 6px;
-  background: rgba(31,92,138,0.10);
+  padding: 2px 7px;
+  border-radius: 3px;
+  margin-top: 7px;
+  background: rgba(21,88,160,0.10);
   color: var(--accent);
-  opacity: .85;
+  opacity: .9;
 }
 
 /* ── TOOLTIP ────────────────────────────────────────────────────────────── */
@@ -472,17 +493,17 @@ a:hover { text-decoration: underline; }
 /* ── LEGEND ─────────────────────────────────────────────────────────────── */
 .legend {
   display: flex;
-  gap: 18px;
+  gap: 20px;
   flex-wrap: wrap;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text2);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.75rem;
   align-items: center;
   letter-spacing: .03em;
 }
-.legend-item { display: flex; align-items: center; gap: 6px; }
-.legend-dot  { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.legend-item { display: flex; align-items: center; gap: 7px; }
+.legend-dot  { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 /* ── BRIEF PANEL ────────────────────────────────────────────────────────── */
 .brief-panel {
@@ -602,6 +623,9 @@ a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
+
+<!-- ── LIGHTHOUSE STRIPE ──────────────────────────────────────────────── -->
+<div class="lighthouse-stripe" aria-hidden="true"></div>
 
 <!-- ── TOPBAR ─────────────────────────────────────────────────────────── -->
 <div class="topbar">
