@@ -599,6 +599,230 @@ a:hover { text-decoration: underline; }
   letter-spacing: .02em;
 }
 
+/* ── ENERGY CHART PANEL ─────────────────────────────────────────────────── */
+.energy-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.energy-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1.25rem;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.energy-panel-title {
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--text2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.energy-panel-updated {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  letter-spacing: .02em;
+}
+
+/* ── Load gauge row ── */
+.energy-gauge-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.energy-gauge {
+  flex: 1;
+  min-width: 140px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.energy-gauge-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  letter-spacing: .03em;
+  margin-bottom: 6px;
+}
+
+.energy-gauge-value {
+  font-family: var(--font-head);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text1);
+  line-height: 1;
+}
+
+.energy-gauge-unit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 3px;
+}
+
+.energy-gauge.is-warn  .energy-gauge-value { color: var(--warn);  }
+.energy-gauge.is-alert .energy-gauge-value { color: var(--alert); }
+.energy-gauge.is-warn  { border-color: var(--warn);  background: var(--warn-bg);  }
+.energy-gauge.is-alert { border-color: var(--alert); background: var(--alert-bg); }
+
+/* ── Stacked bar chart ── */
+.energy-chart-label {
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+}
+
+.energy-bar-wrap {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+
+.energy-bar-track {
+  height: 36px;
+  background: var(--surface2);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  border: 1px solid var(--border);
+}
+
+.energy-bar-seg {
+  height: 100%;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.energy-bar-seg-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: rgba(255,255,255,0.9);
+  letter-spacing: .04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Generation mix colours */
+.seg-wind   { background: #2d8a5e; }   /* sea green */
+.seg-solar  { background: #c4872a; }   /* amber gold */
+.seg-fossil { background: #8a3a2a; }   /* terracotta */
+.seg-import { background: #1558a0; }   /* ocean blue */
+.seg-empty  { background: var(--surface2); flex: 1; }
+
+/* Cable cap marker line */
+.energy-bar-cap-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--alert);
+  opacity: .7;
+  pointer-events: none;
+}
+
+.cable-bar-cap-label {
+  position: absolute;
+  top: -18px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--alert);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  letter-spacing: .03em;
+}
+
+/* ── Legend ── */
+.energy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: .75rem;
+}
+
+.energy-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.energy-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Cable utilization bar ── */
+.cable-bar-track {
+  height: 22px;
+  background: var(--surface2);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  position: relative;
+  margin-bottom: 6px;
+}
+
+.cable-bar-fill {
+  height: 100%;
+  transition: width .6s cubic-bezier(.4,0,.2,1);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+}
+
+.cable-bar-fill.ok    { background: linear-gradient(90deg, #2d8a5e, #3daa72); }
+.cable-bar-fill.warn  { background: linear-gradient(90deg, #c4872a, #e0a030); }
+.cable-bar-fill.alert { background: linear-gradient(90deg, #a02828, #c43030); }
+
+.cable-bar-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,.9);
+  letter-spacing: .04em;
+}
+
+.cable-bar-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: .02em;
+}
+
 /* ── LOADING / ERROR ────────────────────────────────────────────────────── */
 #loading {
   text-align: center;
@@ -893,6 +1117,125 @@ function escHtml(s) {
     .replace(/"/g,"&quot;");
 }
 
+// ── Energy chart panel ────────────────────────────────────────────────────
+function renderEnergyChart(chartData) {
+  if (!chartData) return "";
+
+  const { load, wind, solar, fossil, nb_import, cable_cap, peak_record, updated } = chartData;
+
+  // Cable utilization
+  const cableUtil  = Math.min(100, Math.round((nb_import / cable_cap) * 100));
+  const cableClass = cableUtil >= 95 ? "alert" : cableUtil >= 80 ? "warn" : "ok";
+
+  // Load gauge status
+  const loadClass = load >= 380 ? "is-alert" : load >= 300 ? "is-warn" : "";
+
+  // Generation mix — stacked bar, total = load (100%)
+  const total = load || 1;
+  const windPct   = Math.max(0, Math.round((wind   / total) * 100));
+  const solarPct  = Math.max(0, Math.round((solar  / total) * 100));
+  const fossilPct = Math.max(0, Math.round((fossil / total) * 100));
+  const importPct = Math.max(0, Math.round((nb_import / total) * 100));
+  const capLinePct = Math.round((cable_cap / peak_record) * 100); // position relative to peak axis
+
+  // Show seg label only if wide enough (>8%)
+  const segLabel = (pct, text) =>
+    pct > 8 ? `<span class="energy-bar-seg-label">${text} ${pct}%</span>` : "";
+
+  // NB cable bar — position the cap line relative to 0→peak_record axis
+  const barCapPct = Math.round((cable_cap / peak_record) * 100);
+  const barLoadPct = Math.min(100, Math.round((nb_import / peak_record) * 100));
+  const barFillClass = cableClass;
+
+  return `
+  <div class="energy-panel">
+    <div class="energy-panel-header">
+      <div class="energy-panel-title">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+          <path d="M9 2L3 9h5l-1 5 6-7H8L9 2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+        </svg>
+        PEI Grid — Live Generation Mix
+      </div>
+      <div class="energy-panel-updated">Updated: ${escHtml(updated || "—")}</div>
+    </div>
+
+    <!-- Gauge row -->
+    <div class="energy-gauge-row">
+      <div class="energy-gauge ${loadClass}">
+        <div class="energy-gauge-label">ISLAND LOAD</div>
+        <div class="energy-gauge-value">${load.toFixed(1)}</div>
+        <div class="energy-gauge-unit">MW total demand</div>
+      </div>
+      <div class="energy-gauge">
+        <div class="energy-gauge-label">WIND</div>
+        <div class="energy-gauge-value">${wind.toFixed(1)}</div>
+        <div class="energy-gauge-unit">MW · ${windPct}% of load</div>
+      </div>
+      <div class="energy-gauge">
+        <div class="energy-gauge-label">SOLAR</div>
+        <div class="energy-gauge-value">${solar.toFixed(1)}</div>
+        <div class="energy-gauge-unit">MW · ${solarPct}% of load</div>
+      </div>
+      <div class="energy-gauge ${fossil > 20 ? "is-warn" : ""}">
+        <div class="energy-gauge-label">FOSSIL FUEL</div>
+        <div class="energy-gauge-value">${fossil.toFixed(1)}</div>
+        <div class="energy-gauge-unit">MW · combustion turbines</div>
+      </div>
+      <div class="energy-gauge ${cableClass === "alert" ? "is-alert" : cableClass === "warn" ? "is-warn" : ""}">
+        <div class="energy-gauge-label">NB IMPORT</div>
+        <div class="energy-gauge-value">${nb_import.toFixed(0)}</div>
+        <div class="energy-gauge-unit">MW · cap: ${cable_cap} MW</div>
+      </div>
+    </div>
+
+    <!-- Generation mix stacked bar -->
+    <div class="energy-chart-label">Generation Mix — % of island load</div>
+    <div class="energy-bar-wrap">
+      <div class="energy-bar-track">
+        ${windPct > 0 ? `<div class="energy-bar-seg seg-wind" style="width:${windPct}%">${segLabel(windPct,"Wind")}</div>` : ""}
+        ${solarPct > 0 ? `<div class="energy-bar-seg seg-solar" style="width:${solarPct}%">${segLabel(solarPct,"Solar")}</div>` : ""}
+        ${fossilPct > 0 ? `<div class="energy-bar-seg seg-fossil" style="width:${fossilPct}%">${segLabel(fossilPct,"Fossil")}</div>` : ""}
+        ${importPct > 0 ? `<div class="energy-bar-seg seg-import" style="width:${importPct}%">${segLabel(importPct,"NB Import")}</div>` : ""}
+        <div class="energy-bar-seg seg-empty"></div>
+      </div>
+    </div>
+    <div class="energy-legend">
+      <div class="energy-legend-item"><div class="energy-legend-dot" style="background:#2d8a5e"></div>Wind (${wind.toFixed(1)} MW)</div>
+      <div class="energy-legend-item"><div class="energy-legend-dot" style="background:#c4872a"></div>Solar (${solar.toFixed(1)} MW)</div>
+      <div class="energy-legend-item"><div class="energy-legend-dot" style="background:#8a3a2a"></div>Fossil fuel (${fossil.toFixed(1)} MW)</div>
+      <div class="energy-legend-item"><div class="energy-legend-dot" style="background:#1558a0"></div>NB Import (${nb_import.toFixed(0)} MW)</div>
+    </div>
+
+    <!-- NB cable utilization bar -->
+    <div style="margin-top:1.25rem">
+      <div class="energy-chart-label">NB Subsea Cable Utilization — hard cap: ${cable_cap} MW</div>
+      <div class="energy-bar-wrap">
+        <div class="cable-bar-cap-label" style="left:${barCapPct}%">${cable_cap} MW cap</div>
+        <div class="cable-bar-track">
+          <div class="cable-bar-fill ${barFillClass}" style="width:${Math.min(100,barLoadPct)}%">
+            <span class="cable-bar-pct">${cableUtil}%</span>
+          </div>
+          <div class="energy-bar-cap-line" style="left:${barCapPct}%"></div>
+        </div>
+        <div class="cable-bar-meta">
+          <span>0 MW</span>
+          <span style="color:${cableClass==="alert"?"var(--alert)":cableClass==="warn"?"var(--warn)":"var(--text3)"}">
+            ${nb_import.toFixed(0)} MW imported · ${cableUtil}% of ${cable_cap} MW cap
+            ${cableClass==="alert" ? " ⚠ AT CAPACITY" : cableClass==="warn" ? " — elevated" : ""}
+          </span>
+          <span>${peak_record} MW peak</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text3);margin-top:.75rem">
+      Source: Maritime Electric via Government of PEI (wdf.princeedwardisland.ca) · 15-min updates ·
+      <a href="https://www.princeedwardisland.ca/en/feature/pei-wind-energy/" target="_blank" rel="noopener">GPEI Wind Energy</a>
+      · <a href="https://www.maritimeelectric.com/outages/outages/grid-status/" target="_blank" rel="noopener">Maritime Electric Grid Status</a>
+    </div>
+  </div>`;
+}
+
 // ── Render dashboard ──────────────────────────────────────────────────────
 function renderDashboard(data) {
   // Summary bar
@@ -940,6 +1283,12 @@ function renderDashboard(data) {
   // Sectors
   const sectorsEl = document.getElementById("sectors");
   sectorsEl.innerHTML = "";
+
+  // ── Energy chart panel (inject before sector cards if data available) ──
+  const energySector = data.sectors && data.sectors.energy;
+  if (energySector && energySector.chart_data) {
+    sectorsEl.innerHTML += renderEnergyChart(energySector.chart_data);
+  }
 
   const sectorOrder = SECTOR_ORDER.filter(k => data.sectors && data.sectors[k]);
   const extraSectors = Object.keys(data.sectors || {}).filter(k => !SECTOR_ORDER.includes(k));
