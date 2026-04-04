@@ -1,23 +1,19 @@
 """
-PEI Infrastructure Intelligence — Scraper
-==========================================
-Mirrors the TII (Toronto Infrastructure Intelligence) data structure:
-  { sectors: { <sector>: { tiers: { tier1: { indicators: [...] } } } } }
+PEI Infrastructure Intelligence — Scraper  v2
+==============================================
+Mirrors TII data structure:
+  { sectors: { <sector>: { tiers: { tier1: { indicators:[...] } } } } }
 
-Sectors: energy, water, health, transport_logistics, financial, public_safety, environment, food
-Tiers:
-  tier1 — critical infrastructure (real-time / authoritative)
-  tier2 — secondary systems (near real-time / official feeds)
-  tier3 — contextual signals (weekly / manually curated)
-
-PEI-specific data sources:
-  - Maritime Electric (grid status, outages)
-  - Environment and Climate Change Canada (weather, air quality)
-  - Health PEI / CIHI
-  - Confederation Bridge / Northumberland Ferries
-  - PEI Open Data Portal
-  - Statistics Canada
-  - poweroutage.com (outage aggregation)
+New in v2:
+  - GPEI/Maritime Electric live MW feed (energy generation mix)
+  - Open-Meteo for Charlottetown weather + bridge-area wind gusts (no API key)
+  - Bank of Canada Valet API for CAD/USD
+  - AviationWeather.gov METAR for Charlottetown Airport (CYYG)
+  - Statistics Canada Valet API for PEI CPI
+  - CMHC API for Charlottetown housing vacancy
+  - Fixed Grid Status false-positive (keyword to live status extraction)
+  - Environment Canada AQHI XML feed
+  - ECCC weather alerts RSS for PEI
 
 Run:   python pii_scraper.py
 Output: pii_data_YYYYMMDD.json  +  pii_data_latest.json
@@ -27,27 +23,41 @@ import json
 import re
 import sys
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
 
-# ---------------------------------------------------------------------------
+# ── Constants ────────────────────────────────────────────────────────────────
 HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (compatible; PEI-Infrastructure-Intelligence/1.0; "
+        "Mozilla/5.0 (compatible; PEI-Infrastructure-Intelligence/2.0; "
         "+https://github.com/Sargjones/pei-infrastructure)"
     )
 }
-TIMEOUT = 18
-TODAY   = datetime.now(timezone.utc)
-DATESTAMP = TODAY.strftime("%Y%m%d")
-GENERATED = TODAY.strftime("%Y-%m-%d %H:%M UTC")
+TIMEOUT        = 18
+TODAY          = datetime.now(timezone.utc)
+DATESTAMP      = TODAY.strftime("%Y%m%d")
+GENERATED      = TODAY.strftime("%Y-%m-%d %H:%M UTC")
+CABLE_CAP_MW   = 300
+PEAK_RECORD_MW = 400
+CHARLOTTETOWN_LAT, CHARLOTTETOWN_LON = 46.2382, -63.1311
+BRIDGE_LAT,        BRIDGE_LON        = 46.2500, -63.6800
 
-# ---------------------------------------------------------------------------
-# Helper utilities
-# ---------------------------------------------------------------------------
+WMO_DESC = {
+    0:"Clear", 1:"Mainly clear", 2:"Partly cloudy", 3:"Overcast",
+    45:"Fog", 48:"Icy fog",
+    51:"Light drizzle", 53:"Moderate drizzle", 55:"Heavy drizzle",
+    61:"Light rain", 63:"Moderate rain", 65:"Heavy rain",
+    71:"Light snow", 73:"Moderate snow", 75:"Heavy snow", 77:"Snow grains",
+    80:"Light showers", 81:"Showers", 82:"Heavy showers",
+    85:"Snow showers", 86:"Heavy snow showers",
+    95:"Thunderstorm", 96:"Thunderstorm w/ hail", 99:"Severe thunderstorm",
+}
+
+
+# ── HTTP helpers ─────────────────────────────────────────────────────────────
 
 def get(url, **kw):
     try:
@@ -55,14 +65,23 @@ def get(url, **kw):
         r.raise_for_status()
         return r
     except Exception as e:
-        print(f"  [WARN] GET {url} — {e}", file=sys.stderr)
+        print(f"  [WARN] GET {url[:80]} — {e}", file=sys.stderr)
         return None
 
+def post_json(url, body):
+    try:
+        r = requests.post(url, json=body,
+                          headers={**HEADERS, "Content-Type": "application/json"},
+                          timeout=TIMEOUT)
+        r.raise_for_status()
+        return r
+    except Exception as e:
+        print(f"  [WARN] POST {url[:80]} — {e}", file=sys.stderr)
+        return None
 
 def soup(url, **kw):
     r = get(url, **kw)
     return BeautifulSoup(r.text, "html.parser") if r else None
-
 
 def indicator(label, value, unit="", status="ok", note="", context="",
               date="", source="", tier=1, muted=False, banner=""):
@@ -80,1033 +99,689 @@ def indicator(label, value, unit="", status="ok", note="", context="",
         "banner":  banner,
     }.items() if v or v == 0}
 
-
 def manual(label, value, source="", tier=1, note=""):
-    return indicator(label, value, status="manual", source=source, tier=tier, note=note)
+    return indicator(label, value, status="manual",
+                     source=source, tier=tier, note=note)
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: ENERGY
-# ---------------------------------------------------------------------------
+# ── Shared data fetchers ──────────────────────────────────────────────────────
 
-# Hard limits for PEI grid (MW)
-CABLE_CAP_MW   = 300   # max import from NB via 4 subsea cables
-PEAK_RECORD_MW = 400   # recent winter peak record
+def fetch_open_meteo(lat, lon, params="temperature_2m,wind_speed_10m,wind_gusts_10m,weather_code,precipitation,relative_humidity_2m"):
+    url = (f"https://api.open-meteo.com/v1/forecast"
+           f"?latitude={lat}&longitude={lon}&current={params}"
+           f"&timezone=America%2FHalifax&forecast_days=1")
+    r = get(url)
+    if not r:
+        return None
+    try:
+        return r.json().get("current", {})
+    except Exception:
+        return None
 
+def fetch_boc_rate(series="FXUSDCAD"):
+    url = f"https://www.bankofcanada.ca/valet/observations/{series}/json?recent=1"
+    r   = get(url)
+    if not r:
+        return None, None
+    try:
+        obs = r.json().get("observations", [])
+        if obs:
+            latest = obs[-1]
+            return float(latest[series]["v"]), latest.get("d", "")
+    except Exception:
+        pass
+    return None, None
+
+def fetch_aqhi_pei():
+    url = "https://dd.weather.gc.ca/air_quality/aqhi/atl/observation/realtime/xml/AQ_OBS_PE_CURRENT.xml"
+    r   = get(url)
+    if not r:
+        return None
+    try:
+        s = BeautifulSoup(r.text, "xml")
+        for tag in ["aqhi", "AQHI", "airQualityHealthIndex"]:
+            el = s.find(tag)
+            if el and el.text.strip():
+                return float(el.text.strip())
+    except Exception:
+        pass
+    return None
+
+def fetch_wx_alerts_pei():
+    url   = "https://weather.gc.ca/rss/warning/pe_e.xml"
+    r     = get(url)
+    count, status, text = 0, "ok", "None active"
+    if not r:
+        return count, status, text
+    try:
+        s       = BeautifulSoup(r.text, "xml")
+        entries = s.find_all("entry") or s.find_all("item")
+        active  = [e for e in entries if e.find("title") and
+                   any(kw in (e.find("title").text or "").lower()
+                       for kw in ["warning","watch","statement","advisory"])]
+        count   = len(active)
+        if count > 0:
+            status = "warn"
+            first  = active[0].find("title").text.strip()
+            text   = first[:70] + ("…" if len(first) > 70 else "")
+        if any("warning" in (e.find("title").text or "").lower() for e in active):
+            status = "alert"
+    except Exception:
+        pass
+    return count, status, text
+
+def fetch_metar(icao="CYYG"):
+    url = f"https://aviationweather.gov/api/data/metar?ids={icao}&format=json"
+    r   = get(url)
+    if not r:
+        return None
+    try:
+        data = r.json()
+        return data[0] if data else None
+    except Exception:
+        return None
+
+def fetch_statcan_cpi_pei():
+    """PEI All-items CPI — StatCan getSeriesDataFromCubePidCoordAndLatestNPeriods"""
+    url = ("https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
+           "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
+           "?pid=18100004&coord=1.9&latestN=2")
+    r = get(url)
+    if not r:
+        return None, None, None
+    try:
+        series = r.json().get("object", [])
+        if len(series) < 1:
+            return None, None, None
+        latest   = series[-1]
+        prev     = series[-2] if len(series) >= 2 else None
+        val      = float(latest.get("value", 0))
+        ref      = latest.get("refPer", "")
+        yoy      = None
+        if prev:
+            pv = float(prev.get("value", 0))
+            if pv:
+                yoy = round(((val - pv) / pv) * 100, 1)
+        return val, ref, yoy
+    except Exception:
+        return None, None, None
+
+def fetch_cmhc_vacancy():
+    """Charlottetown rental vacancy rate from CMHC HMiP API."""
+    url    = "https://api.cmhc-schl.gc.ca/housing/indicators/vacancy-rate"
+    params = {"geo_uid": "105", "year": TODAY.year}
+    r      = get(url, params=params)
+    if not r:
+        return None, None
+    try:
+        data    = r.json()
+        results = data.get("data", data.get("results", []))
+        if results:
+            latest = results[-1] if isinstance(results, list) else results
+            rate   = latest.get("vacancy_rate", latest.get("value"))
+            period = latest.get("year", latest.get("period", ""))
+            return float(rate), str(period)
+    except Exception:
+        pass
+    return None, None
 
 def fetch_gpei_energy():
-    """
-    Call the GPEI workflow API directly — this is the authoritative
-    Maritime Electric feed, updated every 15 minutes.
-    Returns dict with keys: load, wind, solar, fossil, wind_used,
-    wind_exported, update_time  — all floats in MW, or None on failure.
-
-    Endpoint documented by Peter Rukavina (ruk.ca) and confirmed by GPEI:
-      POST https://wdf.princeedwardisland.ca/prod/workflow
-      Body: {"featureName": "WindEnergy"}
-    """
-    url = "https://wdf.princeedwardisland.ca/prod/workflow"
+    """POST to GPEI workflow API — Maritime Electric 15-min feed."""
+    r = post_json("https://wdf.princeedwardisland.ca/prod/workflow",
+                  {"featureName": "WindEnergy"})
+    if not r:
+        return None
     try:
-        r = requests.post(
-            url,
-            json={"featureName": "WindEnergy"},
-            headers={**HEADERS, "Content-Type": "application/json"},
-            timeout=TIMEOUT
-        )
-        r.raise_for_status()
-        data = r.json()
-
-        # Response structure: {"components": [{"type": "...", "data": {...}}, ...]}
-        # Find the component that has the numeric fields we need.
-        components = data.get("components", [])
+        data   = r.json()
+        comps  = data.get("components", [])
         result = {}
-
-        for comp in components:
-            d = comp.get("data", {}) or comp.get("fields", {}) or comp
+        for comp in comps:
+            d = comp.get("data") or comp.get("fields") or comp
             if not isinstance(d, dict):
                 continue
-            # Field names vary slightly by API version — check all known variants
-            for key in d:
+            for key, val in d.items():
                 lk = key.lower()
-                val = d[key]
+                try:
+                    fval = float(str(val).replace(",", ""))
+                except (ValueError, TypeError):
+                    if "time" in lk or "update" in lk:
+                        result["update_time"] = str(val)
+                    continue
+                if   "load" in lk and "on" in lk:              result["load"]   = fval
+                elif "wind" in lk and ("gen" in lk or "total" in lk): result["wind"] = fval
+                elif "solar" in lk and "gen" in lk:            result["solar"]  = fval
+                elif "fossil" in lk or ("fuel" in lk and "fossil" in lk): result["fossil"] = fval
+                elif "time" in lk or "update" in lk:           result["update_time"] = str(val)
+        # flat fallback
+        if not result:
+            for key, val in (data if isinstance(data, dict) else {}).items():
+                lk = key.lower()
                 try:
                     fval = float(str(val).replace(",", ""))
                 except (ValueError, TypeError):
                     continue
-                if "load" in lk and "on" in lk:
-                    result["load"] = fval
-                elif "wind" in lk and ("gen" in lk or "total" in lk):
-                    result["wind"] = fval
-                elif "solar" in lk and "gen" in lk:
-                    result["solar"] = fval
-                elif "fossil" in lk or "fuel" in lk:
-                    result["fossil"] = fval
-                elif "wind" in lk and "local" in lk:
-                    result["wind_used"] = fval
-                elif "wind" in lk and "export" in lk:
-                    result["wind_exported"] = fval
-                elif "update" in lk or "time" in lk:
-                    result["update_time"] = str(val)
-
-        # Fallback: try flat structure if components parsing found nothing
-        if not result:
-            flat = data if isinstance(data, dict) else {}
-            for key in flat:
-                lk = key.lower()
-                try:
-                    fval = float(str(flat[key]).replace(",", ""))
-                except (ValueError, TypeError):
-                    continue
-                if "load" in lk:       result["load"]   = fval
-                elif "wind" in lk:     result["wind"]   = fval
-                elif "solar" in lk:    result["solar"]  = fval
-                elif "fossil" in lk:   result["fossil"] = fval
-
-        return result if result else None
-
+                if   "load"   in lk: result["load"]   = fval
+                elif "wind"   in lk: result["wind"]   = fval
+                elif "solar"  in lk: result["solar"]  = fval
+                elif "fossil" in lk: result["fossil"] = fval
+        return result or None
     except Exception as e:
-        print(f"  [WARN] GPEI energy API — {e}", file=sys.stderr)
+        print(f"  [WARN] GPEI parse — {e}", file=sys.stderr)
         return None
 
 
+# ── SECTOR: ENERGY ───────────────────────────────────────────────────────────
+
 def scrape_energy():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── GPEI / Maritime Electric live grid data ──────────────────────────
-    # Direct API: POST https://wdf.princeedwardisland.ca/prod/workflow
-    # {"featureName": "WindEnergy"} → MW values updated every 15 min
     grid = fetch_gpei_energy()
-
     if grid and "load" in grid:
-        load_mw   = grid.get("load",   0.0)
-        wind_mw   = grid.get("wind",   0.0)
-        solar_mw  = grid.get("solar",  0.0)
-        fossil_mw = grid.get("fossil", 0.0)
+        load   = grid.get("load",   0.0)
+        wind   = grid.get("wind",   0.0)
+        solar  = grid.get("solar",  0.0)
+        fossil = grid.get("fossil", 0.0)
+        nb     = max(0.0, load - wind - solar - fossil)
+        util   = round((nb / CABLE_CAP_MW) * 100, 1)
+        upd    = grid.get("update_time", GENERATED)
 
-        # NB import = load minus all on-island generation
-        # (can go negative when PEI is a net exporter — rare in winter)
-        on_island_gen = wind_mw + solar_mw + fossil_mw
-        nb_import_mw  = max(0.0, load_mw - on_island_gen)
-        nb_util_pct   = round((nb_import_mw / CABLE_CAP_MW) * 100, 1)
-
-        update_str = grid.get("update_time", GENERATED)
-
-        # ── Island System Load ───────────────────────────────────────────
-        load_status = "ok"
-        load_note   = ""
-        if load_mw >= 380:
-            load_status = "alert"
-            load_note   = f"Extreme demand — load shedding risk. Record: ~{PEAK_RECORD_MW} MW"
-        elif load_mw >= 300:
-            load_status = "warn"
-            load_note   = "Demand at or above cable import cap — on-island generation required"
-        indicators_t1.append(indicator(
-            "Island System Load", f"{load_mw:.1f}",
-            unit="MW",
-            status=load_status,
-            note=load_note,
+        t1.append(indicator("Island System Load", f"{load:.1f}", unit="MW",
+            status="alert" if load >= 380 else "warn" if load >= 300 else "ok",
+            note=(f"Extreme demand — load shedding risk. Record ~{PEAK_RECORD_MW} MW" if load >= 380
+                  else "Demand at or above cable import cap — on-island generation required" if load >= 300
+                  else ""),
             context=f"Peak record: ~{PEAK_RECORD_MW} MW (Jan/Feb)",
-            source="Maritime Electric via GPEI",
-            tier=1,
-            date=update_str,
-        ))
+            source="Maritime Electric via GPEI", tier=1, date=upd))
 
-        # ── NB Cable Utilization ─────────────────────────────────────────
-        # This is the critical stress indicator — how close to the 300 MW hard cap
-        cable_status = "ok"
-        cable_note   = ""
-        if nb_util_pct >= 95:
-            cable_status = "alert"
-            cable_note   = "Cables at capacity — load shedding imminent without on-island backup"
-        elif nb_util_pct >= 80:
-            cable_status = "warn"
-            cable_note   = "High cable utilization — grid stress elevated"
-        indicators_t1.append(indicator(
-            "NB Cable Utilization", f"{nb_util_pct}",
-            unit=f"% of {CABLE_CAP_MW} MW cap  ({nb_import_mw:.0f} MW imported)",
-            status=cable_status,
-            note=cable_note,
+        t1.append(indicator("NB Cable Utilization", f"{util}",
+            unit=f"% of {CABLE_CAP_MW} MW cap  ({nb:.0f} MW imported)",
+            status="alert" if util >= 95 else "warn" if util >= 80 else "ok",
+            note=("Cables at capacity — load shedding imminent" if util >= 95
+                  else "High cable utilization — grid stress elevated" if util >= 80 else ""),
             context="4 subsea cables — hard physical limit",
-            source="Maritime Electric via GPEI",
-            tier=1,
-            date=update_str,
-            banner=(
-                f"NB cable import at {nb_util_pct}% capacity — load shedding risk"
-                if cable_status == "alert" else ""
-            ),
-        ))
+            source="Maritime Electric via GPEI", tier=1, date=upd,
+            banner=f"NB cable import at {util}% — load shedding risk" if util >= 95 else ""))
 
-        # ── Wind Generation ──────────────────────────────────────────────
-        wind_pct = round((wind_mw / load_mw * 100), 1) if load_mw > 0 else 0
-        indicators_t1.append(indicator(
-            "Wind Generation", f"{wind_mw:.1f}",
-            unit=f"MW  ({wind_pct}% of load)",
-            status="ok",
-            context="PEI has ~204 MW installed wind capacity",
-            source="Maritime Electric via GPEI",
-            tier=1,
-            date=update_str,
-        ))
+        wpct = round((wind / load * 100), 1) if load > 0 else 0
+        t1.append(indicator("Wind Generation", f"{wind:.1f}",
+            unit=f"MW  ({wpct}% of load)",
+            context="~204 MW installed wind capacity on PEI",
+            source="Maritime Electric via GPEI", tier=1, date=upd))
 
-        # ── Solar Generation ─────────────────────────────────────────────
-        if solar_mw is not None:
-            indicators_t2.append(indicator(
-                "Solar Generation", f"{solar_mw:.1f}",
-                unit="MW",
-                status="ok",
-                context="Includes Slemon Park, Sunbank + batteries",
-                source="Maritime Electric via GPEI",
-                tier=2,
-                date=update_str,
-            ))
-
-        # ── Fossil Fuel (on-island backup) ────────────────────────────────
-        fossil_status = "ok"
-        fossil_note   = ""
-        if fossil_mw > 20:
-            fossil_status = "warn"
-            fossil_note   = "Combustion turbines running — grid under pressure"
-        if fossil_mw > 60:
-            fossil_status = "alert"
-            fossil_note   = "Heavy fossil fuel dispatch — near peak capacity event"
-        indicators_t2.append(indicator(
-            "On-Island Fossil Fuel", f"{fossil_mw:.1f}",
-            unit="MW",
-            status=fossil_status,
-            note=fossil_note,
+        t2.append(indicator("Solar Generation", f"{solar:.1f}", unit="MW",
+            context="Slemon Park, Sunbank + batteries",
+            source="Maritime Electric via GPEI", tier=2, date=upd))
+        t2.append(indicator("On-Island Fossil Fuel", f"{fossil:.1f}", unit="MW",
+            status="alert" if fossil > 60 else "warn" if fossil > 20 else "ok",
+            note=("Heavy fossil dispatch — near peak capacity event" if fossil > 60
+                  else "Combustion turbines running — grid under pressure" if fossil > 20 else ""),
             context="Combustion turbines — last resort backup",
-            source="Maritime Electric via GPEI",
-            tier=2,
-            date=update_str,
-        ))
-
-        # ── NB Import (absolute MW) ──────────────────────────────────────
-        indicators_t2.append(indicator(
-            "NB Import", f"{nb_import_mw:.0f}",
+            source="Maritime Electric via GPEI", tier=2, date=upd))
+        t2.append(indicator("NB Import", f"{nb:.0f}",
             unit=f"MW  (cap: {CABLE_CAP_MW} MW)",
-            status="ok" if nb_import_mw < 240 else ("warn" if nb_import_mw < 285 else "alert"),
-            source="Maritime Electric via GPEI",
-            tier=2,
-            date=update_str,
-        ))
+            status="alert" if nb >= 285 else "warn" if nb >= 240 else "ok",
+            source="Maritime Electric via GPEI", tier=2, date=upd))
 
-        # Store grid data for the chart panel (attached to sector metadata)
-        grid_chart_data = {
-            "load":    round(load_mw, 1),
-            "wind":    round(wind_mw, 1),
-            "solar":   round(solar_mw, 1),
-            "fossil":  round(fossil_mw, 1),
-            "nb_import": round(nb_import_mw, 1),
-            "cable_cap": CABLE_CAP_MW,
-            "peak_record": PEAK_RECORD_MW,
-            "updated": update_str,
-        }
-
+        chart = dict(load=round(load,1), wind=round(wind,1), solar=round(solar,1),
+                     fossil=round(fossil,1), nb_import=round(nb,1),
+                     cable_cap=CABLE_CAP_MW, peak_record=PEAK_RECORD_MW, updated=upd)
     else:
-        # API unavailable — fall back to manual indicators
-        print("  [WARN] GPEI energy API returned no data — using manual fallback", file=sys.stderr)
-        for label, note in [
-            ("Island System Load",    "GPEI API unavailable — check maritimeelectric.com"),
-            ("NB Cable Utilization",  "GPEI API unavailable"),
-            ("Wind Generation",       "GPEI API unavailable"),
-        ]:
-            indicators_t1.append(manual(label, "unavailable",
-                source="Maritime Electric via GPEI", tier=1, note=note))
-        grid_chart_data = None
+        for lbl in ["Island System Load", "NB Cable Utilization", "Wind Generation"]:
+            t1.append(manual(lbl, "unavailable", source="Maritime Electric via GPEI", tier=1,
+                note="GPEI API unavailable — check maritimeelectric.com"))
+        chart = None
 
-    # ── Grid Status Index (Maritime Electric status page) ────────────────
-    # FIXED: We now only trigger alert/warn on the LIVE STATUS INDICATOR,
-    # not on any keyword found in body text (which always contains "load shedding"
-    # as explanatory text). We look for the specific status widget value.
-    grid_url = "https://www.maritimeelectric.com/outages/outages/grid-status/"
-    s = soup(grid_url)
-    grid_status = "ok"
-    grid_value  = "Normal"
-    grid_note   = ""
+    # Grid Status Index (fixed: live status text only)
+    s = soup("https://www.maritimeelectric.com/outages/outages/grid-status/")
+    gsi_val, gsi_status, gsi_note = "Normal", "ok", ""
     if s:
-        # The Grid Status Index widget uses colour-coded status levels.
-        # Look for specific status indicator elements, NOT body text keywords.
-        # Status levels: Normal → Conservation Request → Elevated Concern → Load Shedding
-        page_text = s.get_text(" ", strip=True)
-
-        # Extract only the live status element — look for the status display
-        # near phrases like "Current Status:" or "Grid Status Index:"
-        status_match = re.search(
-            r"(?:current\s+status|grid\s+status\s+index)[:\s]+([A-Za-z\s]+?)(?:\.|,|\n|$)",
-            page_text, re.I
-        )
-        if status_match:
-            live_status = status_match.group(1).strip().lower()
-            if "load shed" in live_status or "rotating" in live_status:
-                grid_status = "alert"
-                grid_value  = "Load Shedding"
-                grid_note   = "Rotating outages active — reduce non-essential consumption now"
-            elif "elevated" in live_status:
-                grid_status = "warn"
-                grid_value  = "Elevated Concern"
-                grid_note   = "Grid under stress — conserve energy, especially peak hours"
-            elif "conservation" in live_status:
-                grid_status = "warn"
-                grid_value  = "Conservation Request"
-                grid_note   = "Maritime Electric requesting voluntary conservation"
-            else:
-                grid_status = "ok"
-                grid_value  = "Normal"
-        # If we can't extract a live status cleanly, use load data as proxy
-        elif grid and "load" in grid:
-            load_mw = grid.get("load", 0)
-            if load_mw >= 380:
-                grid_status = "alert"
-                grid_value  = "Critical Load"
-                grid_note   = f"System load {load_mw:.0f} MW — load shedding risk"
-            elif load_mw >= 300:
-                grid_status = "warn"
-                grid_value  = "High Demand"
-                grid_note   = f"System load {load_mw:.0f} MW — at cable import limit"
-
-    indicators_t1.append(indicator(
-        "Grid Status Index", grid_value,
-        status=grid_status,
-        note=grid_note,
-        context="maritimeelectric.com/outages/outages/grid-status",
-        source="Maritime Electric",
-        tier=1,
-        banner=(
-            "LOAD SHEDDING ACTIVE — rotating outages in progress on PEI"
-            if grid_status == "alert" and "load shed" in grid_value.lower() else ""
-        ),
-    ))
-
-    # ── Outage customers ────────────────────────────────────────────────
-    outage_url = "https://poweroutage.com/ca/utility/1370"
-    s2 = soup(outage_url)
-    outage_customers = None
-    outage_status    = "ok"
-    if s2:
-        text2 = s2.get_text(" ", strip=True)
-        m = re.search(r"([\d,]+)\s+(?:customers?|cust)", text2, re.I)
+        page = s.get_text(" ", strip=True)
+        m = re.search(
+            r"(?:current\s+status|grid\s+status\s+index)[:\s]+([A-Za-z][A-Za-z\s]{2,40}?)(?:\.|,|\n|$)",
+            page, re.I)
         if m:
-            outage_customers = m.group(1)
-            num = int(outage_customers.replace(",", ""))
-            if num > 5000:  outage_status = "alert"
-            elif num > 500: outage_status = "warn"
+            live = m.group(1).strip().lower()
+            if "load shed" in live or "rotating" in live:
+                gsi_val, gsi_status = "Load Shedding", "alert"
+                gsi_note = "Rotating outages active — reduce non-essential consumption now"
+            elif "elevated" in live:
+                gsi_val, gsi_status = "Elevated Concern", "warn"
+                gsi_note = "Grid under stress — conserve energy, especially 6–10am and 4–9pm"
+            elif "conservation" in live:
+                gsi_val, gsi_status = "Conservation Request", "warn"
+                gsi_note = "Maritime Electric requesting voluntary conservation"
+        elif grid and grid.get("load", 0) >= 380:
+            gsi_val, gsi_status, gsi_note = "Critical Load", "alert", f"Load {grid['load']:.0f} MW"
+        elif grid and grid.get("load", 0) >= 300:
+            gsi_val, gsi_status, gsi_note = "High Demand", "warn", f"Load {grid['load']:.0f} MW at cable cap"
 
-    if outage_customers is None:
-        indicators_t1.append(manual(
-            "Outage Customers", "check maritimeelectric.com",
-            source="Maritime Electric outage map", tier=1
-        ))
-    else:
-        indicators_t1.append(indicator(
-            "Outage Customers", outage_customers,
-            unit="customers affected",
-            status=outage_status,
-            source="poweroutage.com / Maritime Electric",
-            tier=1,
-            date=GENERATED,
-        ))
+    t1.append(indicator("Grid Status Index", gsi_val, status=gsi_status, note=gsi_note,
+        context="maritimeelectric.com/outages/outages/grid-status",
+        source="Maritime Electric", tier=1,
+        banner="LOAD SHEDDING ACTIVE — rotating outages in progress" if gsi_status == "alert" else ""))
 
-    # ── Summerside Electric Utility ──────────────────────────────────────
-    indicators_t2.append(manual(
-        "Summerside Utility Status", "see summerside.ca/electric",
-        source="City of Summerside Electric Utility", tier=2
-    ))
+    # Outage customers
+    s2    = soup("https://poweroutage.com/ca/utility/1370")
+    o_val, o_status = None, "ok"
+    if s2:
+        m2 = re.search(r"([\d,]+)\s+(?:customers?|cust)", s2.get_text(" ", strip=True), re.I)
+        if m2:
+            o_val   = m2.group(1)
+            n       = int(o_val.replace(",", ""))
+            o_status = "alert" if n > 5000 else "warn" if n > 500 else "ok"
 
-    # ── Heating oil / propane ────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Heating Oil Price", "check nrcan.gc.ca/energy/prices",
+    t1.append(indicator("Outage Customers", o_val or "check map",
+        unit="customers affected" if o_val else "",
+        status=o_status if o_val else "manual",
+        source="poweroutage.com / Maritime Electric", tier=1, date=GENERATED))
+
+    t2.append(manual("Summerside Utility Status", "see summerside.ca/electric",
+        source="City of Summerside Electric Utility", tier=2))
+    t3.append(manual("Heating Oil Price", "check nrcan.gc.ca/energy/prices",
         source="NRCan / local suppliers", tier=3,
-        note="PEI relies heavily on heating oil (~35% of households)"
-    ))
-    indicators_t3.append(manual(
-        "Net Zero Initiatives", "see netzeronavigatorpei.com",
-        source="GPEI Environment, Energy and Climate Action", tier=3
-    ))
+        note="~35% of PEI households rely on heating oil"))
+    t3.append(manual("Net Zero Initiatives", "see netzeronavigatorpei.com",
+        source="GPEI Environment, Energy and Climate Action", tier=3))
 
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        },
-        # chart_data is consumed by index.html to render the energy panel
-        "chart_data": grid_chart_data,
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }, "chart_data": chart}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: WATER
-# ---------------------------------------------------------------------------
+# ── SECTOR: WATER ─────────────────────────────────────────────────────────────
 
 def scrape_water():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── PEI groundwater notes ────────────────────────────────────────────
-    # PEI is unique in Canada — 100% groundwater for drinking water.
-    # No real-time public API for aquifer levels.
-    # Check PEI Open Data for any water-related datasets.
-    boil_url = "https://www.princeedwardisland.ca/en/feature/boil-water-advisories"
-    s = soup(boil_url)
-    boil_count  = 0
-    boil_status = "ok"
-    boil_note   = ""
+    s = soup("https://www.princeedwardisland.ca/en/feature/boil-water-advisories")
+    count, bw_status, bw_note = 0, "ok", ""
     if s:
-        text = s.get_text(" ", strip=True)
-        m = re.search(r"(\d+)\s+(?:active|current)\s+(?:boil.water|advisory)", text, re.I)
-        if m:
-            boil_count  = int(m.group(1))
-            if boil_count > 0:
-                boil_status = "warn"
-                boil_note   = f"{boil_count} active advisory/advisories — check GPEI site"
-            if boil_count > 5:
-                boil_status = "alert"
-        # Also look for any list items
-        items = s.find_all("li")
-        if not m and items:
-            advisory_items = [i for i in items if "boil" in i.get_text().lower() or "advisory" in i.get_text().lower()]
-            if advisory_items:
-                boil_count  = len(advisory_items)
-                boil_status = "warn"
-                boil_note   = f"{boil_count} advisory location(s)"
+        text  = s.get_text(" ", strip=True)
+        m     = re.search(r"(\d+)\s+(?:active|current)\s+(?:boil.water|advisory)", text, re.I)
+        count = int(m.group(1)) if m else len([li for li in s.find_all("li")
+                    if "boil" in li.get_text().lower() or "advisory" in li.get_text().lower()])
+        if count > 0:
+            bw_status = "alert" if count > 5 else "warn"
+            bw_note   = f"{count} active advisory/advisories — check GPEI site"
 
-    indicators_t1.append(indicator(
-        "Boil Water Advisories", str(boil_count) if boil_count else "0",
-        unit="active", status=boil_status, note=boil_note,
-        source="GPEI Environment, Energy and Climate Action",
-        context="100% groundwater province",
-        tier=1, date=GENERATED
-    ))
+    t1.append(indicator("Boil Water Advisories", str(count),
+        unit="active", status=bw_status, note=bw_note,
+        context="100% groundwater province — unique in Canada",
+        source="GPEI Environment, Energy and Climate Action", tier=1, date=GENERATED))
 
-    # ── Wastewater / central water systems ──────────────────────────────
-    indicators_t2.append(manual(
-        "Central Water Systems", "see GPEI EECA",
+    t2.append(manual("Central Water Systems", "see GPEI EECA",
         source="GPEI Environment, Energy and Climate Action", tier=2,
-        note="~50% of residents on central water; remainder on private wells"
-    ))
-
-    # ── Nitrate contamination risk ────────────────────────────────────────
-    # Agricultural runoff (potato farming) is PEI's primary water quality threat.
-    indicators_t3.append(manual(
-        "Nitrate Risk (Agricultural)", "ongoing monitoring",
+        note="~50% of residents on central water; remainder on private wells"))
+    t3.append(manual("Nitrate Risk (Agricultural)", "ongoing monitoring",
         source="GPEI Environment, Energy and Climate Action", tier=3,
-        note="Potato agriculture — primary source of nitrate contamination in aquifers"
-    ))
+        note="Potato agriculture — primary source of nitrate contamination in aquifers"))
+    t3.append(manual("Coastal Water Quality", "see PEI Open Data",
+        source="data.princeedwardisland.ca", tier=3))
 
-    indicators_t3.append(manual(
-        "Coastal Water Quality", "see PEI Open Data",
-        source="data.princeedwardisland.ca", tier=3
-    ))
-
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: HEALTH
-# ---------------------------------------------------------------------------
+# ── SECTOR: HEALTH ────────────────────────────────────────────────────────────
 
 def scrape_health():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── Environment Canada AQHI ──────────────────────────────────────────
-    aqhi_url = "https://dd.weather.gc.ca/air_quality/aqhi/atl/observation/realtime/xml/AQ_OBS_PE_CURRENT.xml"
-    r = get(aqhi_url)
-    aqhi_val    = None
-    aqhi_status = "ok"
-    aqhi_note   = ""
-    if r:
-        try:
-            aq_soup = BeautifulSoup(r.text, "xml")
-            val_tag = aq_soup.find("aqhi") or aq_soup.find("AQHI")
-            if val_tag:
-                aqhi_val = float(val_tag.text.strip())
-                if aqhi_val >= 7:
-                    aqhi_status = "alert"
-                    aqhi_note   = "High risk — reduce outdoor exertion"
-                elif aqhi_val >= 4:
-                    aqhi_status = "warn"
-                    aqhi_note   = "Moderate risk for sensitive groups"
-        except Exception:
-            pass
-
-    if aqhi_val is not None:
-        indicators_t1.append(indicator(
-            "AQHI — Charlottetown", f"{aqhi_val:.0f}",
-            unit="/10", status=aqhi_status, note=aqhi_note,
-            source="Environment and Climate Change Canada",
-            tier=1, date=GENERATED
-        ))
+    aqhi = fetch_aqhi_pei()
+    if aqhi is not None:
+        t1.append(indicator("AQHI — Charlottetown", f"{aqhi:.0f}", unit="/10",
+            status="alert" if aqhi >= 7 else "warn" if aqhi >= 4 else "ok",
+            note=("High risk — reduce outdoor exertion" if aqhi >= 7
+                  else "Moderate risk for sensitive groups" if aqhi >= 4 else ""),
+            source="Environment and Climate Change Canada", tier=1, date=GENERATED))
     else:
-        indicators_t1.append(manual(
-            "AQHI — Charlottetown", "see weather.gc.ca",
-            source="Environment and Climate Change Canada", tier=1
-        ))
+        t1.append(manual("AQHI — Charlottetown", "see weather.gc.ca",
+            source="Environment and Climate Change Canada", tier=1))
 
-    # ── QEH Emergency department ──────────────────────────────────────────
-    # Health PEI does not publish real-time ED wait times publicly.
-    indicators_t1.append(manual(
-        "QEH ED Wait Time", "see Health PEI",
+    t1.append(manual("QEH ED Wait Time", "see healthpei.ca",
         source="Health PEI — Queen Elizabeth Hospital", tier=1,
-        note="No public real-time ED feed — check healthpei.ca"
-    ))
+        note="No public real-time ED feed — Health PEI does not publish wait times"))
 
-    # ── Hospital capacity ────────────────────────────────────────────────
-    indicators_t2.append(manual(
-        "QEH Capacity", "see healthpei.ca",
-        source="Health PEI", tier=2
-    ))
-
-    indicators_t2.append(manual(
-        "Prince County Hospital", "see healthpei.ca",
-        source="Health PEI — Summerside", tier=2
-    ))
-
-    # ── Respiratory illness / flu season ────────────────────────────────
-    flu_url = "https://www.princeedwardisland.ca/en/information/health-pei/respiratory-illness-surveillance"
-    s = soup(flu_url)
-    flu_status = "ok"
-    flu_note   = ""
-    flu_value  = "Normal"
+    s = soup("https://www.princeedwardisland.ca/en/information/health-pei/respiratory-illness-surveillance")
+    flu_val, flu_status, flu_note = "Normal", "ok", ""
     if s:
         text = s.get_text(" ", strip=True).lower()
         if "elevated" in text or "increased activity" in text:
-            flu_status = "warn"
-            flu_value  = "Elevated activity"
-            flu_note   = "Respiratory illness activity above seasonal baseline"
+            flu_val, flu_status, flu_note = "Elevated", "warn", "Respiratory illness above seasonal baseline"
         elif "high" in text and "activity" in text:
-            flu_status = "alert"
-            flu_value  = "High activity"
+            flu_val, flu_status, flu_note = "High", "alert", "High respiratory illness — increased system pressure"
 
-    indicators_t2.append(indicator(
-        "Respiratory Illness Activity", flu_value,
+    t2.append(indicator("Respiratory Illness Activity", flu_val,
         status=flu_status, note=flu_note,
-        source="Health PEI",
-        tier=2, date=GENERATED
-    ))
-
-    # ── Physician access ─────────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Patients Without a Doctor", "see Health PEI / CFPC",
+        source="Health PEI", tier=2, date=GENERATED))
+    t2.append(manual("QEH Capacity", "see healthpei.ca", source="Health PEI", tier=2))
+    t2.append(manual("Prince County Hospital", "see healthpei.ca",
+        source="Health PEI — Summerside", tier=2))
+    t3.append(manual("Patients Without a Doctor", "see Health PEI / CFPC",
         source="Health PEI", tier=3,
-        note="PEI has ongoing primary care access challenges — lowest physician ratio in Canada"
-    ))
+        note="PEI has ongoing primary care challenges — lowest physician ratio in Canada"))
 
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: TRANSPORT & LOGISTICS
-# ---------------------------------------------------------------------------
+# ── SECTOR: TRANSPORT ─────────────────────────────────────────────────────────
 
 def scrape_transport():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── Confederation Bridge Status ──────────────────────────────────────
-    bridge_url = "https://www.confederationbridge.com/bridge-conditions"
-    s = soup(bridge_url)
-    bridge_status = "ok"
-    bridge_value  = "Open"
-    bridge_note   = ""
+    s = soup("https://www.confederationbridge.com/bridge-conditions")
+    br_val, br_status, br_note = "Open", "ok", ""
     if s:
         text = s.get_text(" ", strip=True).lower()
         if "closed" in text:
-            bridge_status = "alert"
-            bridge_value  = "CLOSED"
-            bridge_note   = "Confederation Bridge closed — check confederationbridge.com"
-        elif "restriction" in text or "caution" in text or "commercial" in text:
-            bridge_status = "warn"
-            bridge_value  = "Restrictions"
-            bridge_note   = "Vehicle restrictions in effect — check confederationbridge.com"
-        elif "one-lane" in text or "one lane" in text:
-            bridge_status = "warn"
-            bridge_value  = "One-lane"
+            br_val, br_status, br_note = "CLOSED", "alert", "Bridge closed — check confederationbridge.com"
+        elif any(w in text for w in ["restriction","caution","commercial","one-lane","one lane"]):
+            br_val, br_status, br_note = "Restrictions", "warn", "Vehicle restrictions — check confederationbridge.com"
 
-    indicators_t1.append(indicator(
-        "Confederation Bridge", bridge_value,
-        status=bridge_status, note=bridge_note,
-        context="12.9 km fixed link to NB",
-        source="confederationbridge.com",
-        tier=1, date=GENERATED,
-        banner="Confederation Bridge closed — primary land supply route affected" if bridge_status == "alert" else ""
-    ))
+    t1.append(indicator("Confederation Bridge", br_val, status=br_status, note=br_note,
+        context="12.9 km fixed link — primary supply corridor",
+        source="confederationbridge.com", tier=1, date=GENERATED,
+        banner="Confederation Bridge CLOSED — primary land supply route affected" if br_status == "alert" else ""))
 
-    # ── Environment Canada wind at bridge ────────────────────────────────
-    # Bridge closure threshold is typically wind gusts > 90 km/h for high-sided vehicles
-    # We use the Borden-Carleton station (bridge approach) from ECCC hourly obs
-    wx_url = "https://dd.weather.gc.ca/observations/xml/PE/hourly/PE_hourly_e.xml"
-    r_wx = get(wx_url)
-    borden_wind = None
-    if r_wx:
-        try:
-            wx_soup = BeautifulSoup(r_wx.text, "xml")
-            for stn in wx_soup.find_all("station"):
-                name = (stn.get("name") or "").lower()
-                if "borden" in name or "carleton" in name or "charlottetown" in name:
-                    ws = stn.find("wind_gust") or stn.find("wind_speed")
-                    if ws and ws.text.strip():
-                        borden_wind = float(ws.text.strip())
-                        break
-        except Exception:
-            pass
-
-    if borden_wind is not None:
-        gust_status = "ok"
-        gust_note   = ""
-        if borden_wind > 90:
-            gust_status = "warn"
-            gust_note   = "High-sided vehicle restrictions may apply"
-        if borden_wind > 110:
-            gust_status = "alert"
-            gust_note   = "Bridge may be closed to all traffic"
-        indicators_t2.append(indicator(
-            "Wind Gust (Bridge Area)", f"{borden_wind:.0f}",
-            unit="km/h", status=gust_status, note=gust_note,
-            source="Environment Canada", tier=2, date=GENERATED
-        ))
+    wx_br = fetch_open_meteo(BRIDGE_LAT, BRIDGE_LON,
+                             params="wind_speed_10m,wind_gusts_10m,temperature_2m")
+    if wx_br and wx_br.get("wind_gusts_10m") is not None:
+        gust = wx_br["wind_gusts_10m"]
+        spd  = wx_br.get("wind_speed_10m", 0)
+        t2.append(indicator("Wind Gust (Bridge Area)", f"{gust:.0f}",
+            unit="km/h",
+            status="alert" if gust > 110 else "warn" if gust > 90 else "ok",
+            note=("Bridge may be closed to all traffic" if gust > 110
+                  else "High-sided vehicle restrictions likely" if gust > 90 else ""),
+            context=f"Sustained: {spd:.0f} km/h",
+            source="Open-Meteo (Borden-Carleton)", tier=2, date=GENERATED))
     else:
-        indicators_t2.append(manual(
-            "Wind Gust (Bridge Area)", "see weather.gc.ca",
-            source="Environment Canada", tier=2
-        ))
+        t2.append(manual("Wind Gust (Bridge Area)", "see weather.gc.ca",
+            source="Environment Canada", tier=2))
 
-    # ── Northumberland Ferries ───────────────────────────────────────────
-    ferry_url = "https://www.ferries.ca/northumberland/schedule/"
-    s2 = soup(ferry_url)
-    ferry_status = "ok"
-    ferry_value  = "Check schedule"
-    if s2:
-        text2 = s2.get_text(" ", strip=True).lower()
-        month_name = TODAY.strftime("%B").lower()
-        # Ferries run May–December typically
-        if TODAY.month in range(5, 13):
-            ferry_value  = "In Season"
-            ferry_status = "ok"
-            if "cancel" in text2 or "suspend" in text2:
-                ferry_status = "warn"
-                ferry_value  = "Disruption"
-        else:
-            ferry_value  = "Off Season"
-            ferry_status = "manual"
+    s2 = soup("https://www.ferries.ca/northumberland/schedule/")
+    f_val, f_status = ("In Season" if TODAY.month in range(5,13) else "Off Season"), \
+                      ("ok"        if TODAY.month in range(5,13) else "manual")
+    if s2 and f_status == "ok":
+        ft = s2.get_text(" ", strip=True).lower()
+        if "cancel" in ft or "suspend" in ft:
+            f_val, f_status = "Disruption", "warn"
 
-    indicators_t2.append(indicator(
-        "Northumberland Ferry", ferry_value,
+    t2.append(indicator("Northumberland Ferry", f_val,
         unit="Wood Islands ↔ Pictou",
-        status=ferry_status,
-        context="Seasonal alternate crossing (May–Dec)",
-        source="ferries.ca", tier=2, date=GENERATED
-    ))
+        status=f_status,
+        context="Seasonal alternate crossing (May–Dec) · 75 min",
+        source="ferries.ca", tier=2, date=GENERATED))
 
-    # ── Charlottetown Airport ────────────────────────────────────────────
-    # No real-time PEI airport delay API; use FlightAware status via manual
-    indicators_t2.append(manual(
-        "Charlottetown Airport (YYG)", "see flightaware.com/CYYG",
-        source="Charlottetown Airport Authority", tier=2
-    ))
+    metar = fetch_metar("CYYG")
+    if metar:
+        fcat = metar.get("fltcat", metar.get("flightCategory", "VFR"))
+        vis  = metar.get("visib")
+        ceil = metar.get("ceil")
+        raw  = metar.get("rawOb", "")
+        m_status = ("alert" if fcat == "LIFR" else "warn" if fcat in ("IFR","MVFR") else "ok")
+        t2.append(indicator("Charlottetown Airport (YYG)", fcat or "VFR",
+            status=m_status,
+            note=(f"Low visibility — delays likely. Vis: {vis}SM  Ceil: {ceil}ft"
+                  if m_status in ("alert","warn") else ""),
+            context=f"METAR: {raw[:55]}" if raw else "",
+            source="AviationWeather.gov METAR", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Charlottetown Airport (YYG)", "see flightaware.com/CYYG",
+            source="Charlottetown Airport Authority", tier=2))
 
-    # ── Road conditions ──────────────────────────────────────────────────
-    road_url = "https://www.princeedwardisland.ca/en/feature/road-conditions"
-    s3 = soup(road_url)
-    road_status = "ok"
-    road_value  = "Normal"
+    s3 = soup("https://www.princeedwardisland.ca/en/feature/road-conditions")
+    r_val, r_status = "Normal", "ok"
     if s3:
-        text3 = s3.get_text(" ", strip=True).lower()
-        if "closed" in text3:
-            road_status = "warn"
-            road_value  = "Closures reported"
-        elif "ice" in text3 or "snow" in text3 or "blowing" in text3:
-            road_status = "warn"
-            road_value  = "Winter conditions"
+        rt = s3.get_text(" ", strip=True).lower()
+        if "closed" in rt:
+            r_val, r_status = "Closures reported", "warn"
+        elif any(w in rt for w in ["ice","snow","blowing","slippery"]):
+            r_val, r_status = "Winter conditions", "warn"
 
-    indicators_t2.append(indicator(
-        "Island Road Conditions", road_value,
-        status=road_status,
-        source="GPEI Transportation and Infrastructure",
-        tier=2, date=GENERATED
-    ))
+    t2.append(indicator("Island Road Conditions", r_val, status=r_status,
+        source="GPEI Transportation and Infrastructure", tier=2, date=GENERATED))
 
-    # ── Supply chain context ─────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Bridge Commercial Traffic", "see confederationbridge.com",
+    t3.append(manual("Bridge Commercial Traffic", "see confederationbridge.com",
         source="Strait Crossing Bridge Ltd", tier=3,
-        note="~1.5M vehicles annually — primary supply corridor for food, fuel, goods"
-    ))
+        note="~1.5M vehicles/year — primary supply corridor for food, fuel, goods"))
 
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: FINANCIAL
-# ---------------------------------------------------------------------------
+# ── SECTOR: FINANCIAL ─────────────────────────────────────────────────────────
 
 def scrape_financial():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── CAD/USD exchange rate ─────────────────────────────────────────────
-    fx_url = "https://api.exchangerate-api.com/v4/latest/USD"
-    r = get(fx_url)
-    cad_rate    = None
-    cad_status  = "ok"
-    cad_note    = ""
-    if r:
-        try:
-            data = r.json()
-            cad_rate = data["rates"].get("CAD")
-        except Exception:
-            pass
-
-    if cad_rate:
-        if cad_rate > 1.45:
-            cad_status = "warn"
-            cad_note   = "Weak loonie — imported goods more expensive"
-        if cad_rate > 1.50:
-            cad_status = "alert"
-            cad_note   = "Very weak loonie — significant import cost pressure"
-        indicators_t1.append(indicator(
-            "CAD/USD", f"{cad_rate:.4f}",
-            unit="CAD per USD", status=cad_status, note=cad_note,
-            source="exchangerate-api.com", tier=1, date=GENERATED
-        ))
+    cad, fx_date = fetch_boc_rate("FXUSDCAD")
+    if cad:
+        t1.append(indicator("CAD/USD", f"{cad:.4f}", unit="CAD per USD",
+            status="alert" if cad > 1.50 else "warn" if cad > 1.45 else "ok",
+            note=("Very weak loonie — significant import cost pressure" if cad > 1.50
+                  else "Weak loonie — imported goods more expensive on PEI" if cad > 1.45 else ""),
+            context=f"BoC as of {fx_date}" if fx_date else "",
+            source="Bank of Canada Valet API", tier=1, date=GENERATED))
     else:
-        indicators_t1.append(manual(
-            "CAD/USD", "unavailable", source="Bank of Canada", tier=1
-        ))
+        t1.append(manual("CAD/USD", "unavailable", source="Bank of Canada", tier=1))
 
-    # ── Inflation (CPI) ──────────────────────────────────────────────────
-    # Statistics Canada CPI — no real-time API, monthly release.
-    indicators_t2.append(manual(
-        "PEI CPI (YoY)", "see statcan.gc.ca table 18-10-0004",
-        source="Statistics Canada", tier=2,
-        note="Monthly release — PEI CPI tracks island-specific price levels"
-    ))
+    cpi_val, cpi_ref, cpi_yoy = fetch_statcan_cpi_pei()
+    if cpi_val and cpi_yoy is not None:
+        t2.append(indicator("PEI CPI (YoY)",
+            f"+{cpi_yoy}%" if cpi_yoy >= 0 else f"{cpi_yoy}%",
+            unit=f"All-items · index: {cpi_val:.1f}",
+            status="alert" if cpi_yoy > 4.0 else "warn" if cpi_yoy > 2.5 else "ok",
+            note=("High inflation — elevated cost pressure on island households" if cpi_yoy > 4.0
+                  else "Above Bank of Canada 2% target" if cpi_yoy > 2.5 else ""),
+            context=f"Reference: {cpi_ref}" if cpi_ref else "",
+            source="Statistics Canada table 18-10-0004", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("PEI CPI (YoY)", "see statcan.gc.ca/18-10-0004",
+            source="Statistics Canada", tier=2,
+            note="Monthly release — PEI-specific price levels"))
 
-    # ── PEI housing market ───────────────────────────────────────────────
-    indicators_t2.append(manual(
-        "Housing Vacancy Rate", "see CMHC Housing Market",
-        source="CMHC", tier=2,
-        note="Charlottetown among lowest vacancy rates in Atlantic Canada"
-    ))
+    vacancy, v_period = fetch_cmhc_vacancy()
+    if vacancy is not None:
+        t2.append(indicator("Charlottetown Vacancy Rate", f"{vacancy:.1f}",
+            unit=f"%  ({v_period})",
+            status="alert" if vacancy < 1.0 else "warn" if vacancy < 2.0 else "ok",
+            note=("Critical housing shortage — vacancy below 1%" if vacancy < 1.0
+                  else "Very low vacancy — Charlottetown housing stress" if vacancy < 2.0 else ""),
+            source="CMHC Housing Market Information Portal", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Housing Vacancy Rate", "see CMHC Housing Market",
+            source="CMHC", tier=2,
+            note="Charlottetown among lowest vacancy rates in Atlantic Canada"))
 
-    # ── Lobster price ────────────────────────────────────────────────────
-    # Lobster is PEI's primary export commodity — a leading economic indicator.
-    indicators_t3.append(manual(
-        "Lobster Ex-Vessel Price", "see PEI Fisheries",
+    t3.append(manual("Lobster Ex-Vessel Price", "see GPEI Fisheries",
         source="GPEI Fisheries and Communities", tier=3,
-        note="PEI lobster — primary export commodity; spring/fall seasons"
-    ))
-
-    # ── Tourism indicators ───────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Tourism Activity", "see tourismpei.com",
+        note="PEI lobster — primary export commodity; spring/fall seasons"))
+    t3.append(manual("Tourism Activity", "see tourismpei.com",
         source="Tourism PEI", tier=3,
-        note="PEI tourism contributes ~$500M annually; highly seasonal (June–Sept)"
-    ))
+        note="~$500M annually; highly seasonal (June–Sept)"))
 
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: PUBLIC SAFETY
-# ---------------------------------------------------------------------------
+# ── SECTOR: PUBLIC SAFETY ──────────────────────────────────────────────────────
 
 def scrape_public_safety():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── Environment Canada weather alerts ────────────────────────────────
-    alert_url = "https://dd.weather.gc.ca/alerts/cap/today/ATLANTIC_CAP.tar"
-    # Use the ATOM feed for PEI instead (more accessible)
-    atom_url = "https://weather.gc.ca/rss/warning/pe_e.xml"
-    r = get(atom_url)
-    wx_alert_count  = 0
-    wx_alert_status = "ok"
-    wx_alert_text   = "None active"
-    if r:
-        try:
-            atom_soup = BeautifulSoup(r.text, "xml")
-            entries   = atom_soup.find_all("entry")
-            active    = [e for e in entries if e.find("title") and
-                         any(kw in (e.find("title").text or "").lower()
-                             for kw in ["warning","watch","statement","advisory"])]
-            wx_alert_count = len(active)
-            if wx_alert_count > 0:
-                wx_alert_status = "warn"
-                first = active[0].find("title").text.strip()
-                wx_alert_text   = first[:60] + ("…" if len(first) > 60 else "")
-            if any("warning" in (e.find("title").text or "").lower() for e in active):
-                wx_alert_status = "alert"
-        except Exception:
-            pass
+    count, wx_status, wx_text = fetch_wx_alerts_pei()
+    t1.append(indicator("Weather Alerts (PEI)", str(count),
+        unit="active alerts", status=wx_status,
+        note=wx_text if count > 0 else "",
+        context="ECCC public alerting — Alert Ready",
+        source="Environment and Climate Change Canada", tier=1, date=GENERATED,
+        banner=f"Weather warning active: {wx_text}" if wx_status == "alert" else ""))
 
-    indicators_t1.append(indicator(
-        "Weather Alerts (PEI)", str(wx_alert_count) if wx_alert_count else "0",
-        unit="active alerts",
-        status=wx_alert_status,
-        note=wx_alert_text if wx_alert_count > 0 else "",
-        context="ECCC public alerting",
-        source="Environment and Climate Change Canada",
-        tier=1, date=GENERATED,
-        banner=f"Weather warning active: {wx_alert_text}" if wx_alert_status == "alert" else ""
-    ))
-
-    # ── PEI EMO ──────────────────────────────────────────────────────────
-    emo_url = "https://www.princeedwardisland.ca/en/topic/emergency-management"
-    s = soup(emo_url)
-    emo_status = "ok"
-    emo_value  = "Normal"
-    emo_note   = ""
+    s = soup("https://www.princeedwardisland.ca/en/topic/emergency-management")
+    emo_val, emo_status, emo_note = "Normal", "ok", ""
     if s:
         text = s.get_text(" ", strip=True).lower()
         if "state of emergency" in text:
-            emo_status = "alert"
-            emo_value  = "State of Emergency"
-            emo_note   = "Provincial state of emergency declared"
-        elif "level 2" in text or "elevated" in text:
-            emo_status = "warn"
-            emo_value  = "Elevated"
+            emo_val, emo_status, emo_note = "State of Emergency", "alert", "Provincial SOE declared"
+        elif "elevated" in text:
+            emo_val, emo_status = "Elevated", "warn"
 
-    indicators_t1.append(indicator(
-        "PEI EMO Status", emo_value,
-        status=emo_status, note=emo_note,
-        source="PEI Emergency Measures Organization",
-        tier=1, date=GENERATED
-    ))
+    t1.append(indicator("PEI EMO Status", emo_val, status=emo_status, note=emo_note,
+        source="PEI Emergency Measures Organization", tier=1, date=GENERATED))
 
-    # ── Coast Guard / Search and Rescue ──────────────────────────────────
-    indicators_t2.append(manual(
-        "Coast Guard (Maritime Region)", "see dfo-mpo.gc.ca",
+    t2.append(manual("Coast Guard (Maritime Region)", "see dfo-mpo.gc.ca",
         source="Canadian Coast Guard — Maritimes Region", tier=2,
-        note="PEI surrounded by Northumberland Strait, Gulf of St. Lawrence, Gulf waters"
-    ))
-
-    # ── RCMP PEI ─────────────────────────────────────────────────────────
-    indicators_t2.append(manual(
-        "RCMP PEI — Public Notices", "see rcmp-grc.gc.ca/pe",
-        source="RCMP L Division", tier=2
-    ))
-
-    # ── Coastal erosion / flood risk ─────────────────────────────────────
-    indicators_t3.append(manual(
-        "Coastal Erosion Status", "see GPEI Environment",
+        note="PEI surrounded by Northumberland Strait, Gulf of St. Lawrence"))
+    t2.append(manual("RCMP PEI — Public Notices", "see rcmp-grc.gc.ca/pe",
+        source="RCMP L Division", tier=2))
+    t3.append(manual("Coastal Erosion Status", "see GPEI Environment",
         source="GPEI Environment, Energy and Climate Action", tier=3,
-        note="PEI: highest coastal erosion rates in Canada (~0.3m/yr avg). Storm surge risk."
-    ))
-
-    # ── Storm surge ──────────────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Storm Surge Risk", "see wateroffice.ec.gc.ca",
+        note="PEI: highest coastal erosion rates in Canada (~0.3m/yr avg). Storm surge risk."))
+    t3.append(manual("Storm Surge Risk", "see wateroffice.ec.gc.ca",
         source="Environment Canada / Water Survey of Canada", tier=3,
-        note="Low-lying coastal areas at risk; Charlottetown harbour tide gauge"
-    ))
+        note="Low-lying coastal areas at risk; Charlottetown harbour tide gauge"))
 
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: ENVIRONMENT
-# ---------------------------------------------------------------------------
+# ── SECTOR: ENVIRONMENT ───────────────────────────────────────────────────────
 
 def scrape_environment():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
+    t1, t2, t3 = [], [], []
 
-    # ── Current conditions — Charlottetown ───────────────────────────────
-    wx_url = "https://dd.weather.gc.ca/observations/xml/PE/hourly/PE_hourly_e.xml"
-    r = get(wx_url)
-    temp = None
-    conditions = None
-    wx_station = "Charlottetown"
-    if r:
-        try:
-            wx_soup = BeautifulSoup(r.text, "xml")
-            for stn in wx_soup.find_all("station"):
-                name = (stn.get("name") or "").lower()
-                if "charlottetown" in name:
-                    t = stn.find("temperature")
-                    c = stn.find("condition") or stn.find("presentWeather")
-                    if t and t.text.strip():
-                        temp = float(t.text.strip())
-                    if c and c.text.strip():
-                        conditions = c.text.strip()
-                    break
-        except Exception:
-            pass
+    wx = fetch_open_meteo(CHARLOTTETOWN_LAT, CHARLOTTETOWN_LON)
+    if wx:
+        temp   = wx.get("temperature_2m")
+        gust   = wx.get("wind_gusts_10m")
+        spd    = wx.get("wind_speed_10m")
+        precip = wx.get("precipitation")
+        hum    = wx.get("relative_humidity_2m")
+        desc   = WMO_DESC.get(wx.get("weather_code", 0), "")
 
-    if temp is not None:
-        temp_status = "ok"
-        temp_note   = ""
-        if temp <= -20:
-            temp_status = "warn"
-            temp_note   = "Extreme cold — elevated heating demand and exposure risk"
-        elif temp >= 32:
-            temp_status = "warn"
-            temp_note   = "Heat advisory conditions"
-        indicators_t1.append(indicator(
-            "Temperature (Charlottetown)", f"{temp:.1f}",
-            unit="°C", status=temp_status, note=temp_note,
-            context=conditions or "",
-            source="Environment Canada",
-            tier=1, date=GENERATED
-        ))
+        t_status = ("alert" if temp is not None and temp <= -25 else
+                    "warn"  if temp is not None and (temp <= -15 or temp >= 32) else "ok")
+        t1.append(indicator("Temperature (Charlottetown)",
+            f"{temp:.1f}" if temp is not None else "—", unit="°C",
+            status=t_status,
+            note=("Extreme cold — elevated heating demand and exposure risk" if temp is not None and temp <= -25
+                  else "Cold snap — elevated heating demand" if temp is not None and temp <= -15
+                  else "Heat advisory conditions" if temp is not None and temp >= 32 else ""),
+            context=(f"{desc}  ·  Wind {spd:.0f} km/h  ·  Humidity {hum}%"
+                     if spd and hum else desc),
+            source="Open-Meteo (Charlottetown)", tier=1, date=GENERATED))
+
+        if gust is not None:
+            t1.append(indicator("Wind Gusts (Charlottetown)", f"{gust:.0f}",
+                unit="km/h",
+                status="alert" if gust > 100 else "warn" if gust > 70 else "ok",
+                note=("Damaging gusts — infrastructure risk" if gust > 100
+                      else "Strong gusts — elevated bridge and coastal risk" if gust > 70 else ""),
+                context=f"Sustained: {spd:.0f} km/h" if spd else "",
+                source="Open-Meteo (Charlottetown)", tier=1, date=GENERATED))
+
+        if precip is not None and precip > 0:
+            t2.append(indicator("Precipitation (Current Hour)", f"{precip:.1f}",
+                unit="mm",
+                status="warn" if precip > 10 else "ok",
+                note="Heavy precipitation — road and drainage impacts" if precip > 10 else "",
+                source="Open-Meteo", tier=2, date=GENERATED))
     else:
-        indicators_t1.append(manual(
-            "Temperature (Charlottetown)", "see weather.gc.ca",
-            source="Environment Canada", tier=1
-        ))
+        t1.append(manual("Temperature (Charlottetown)", "see weather.gc.ca",
+            source="Environment Canada", tier=1))
 
-    # ── Gulf of St. Lawrence sea surface temperature ──────────────────────
-    # Warmer Gulf waters intensify Atlantic storms affecting PEI
-    indicators_t2.append(manual(
-        "Gulf SST Anomaly", "see dfo-mpo.gc.ca",
+    t2.append(manual("Gulf SST Anomaly", "see dfo-mpo.gc.ca",
         source="DFO / Bedford Institute of Oceanography", tier=2,
-        note="Warm Gulf SST amplifies storm systems and contributes to coastal erosion"
-    ))
-
-    # ── Snowpack / drought ───────────────────────────────────────────────
-    indicators_t2.append(manual(
-        "Drought Conditions", "see agr.gc.ca/drought-watch",
+        note="Warm Gulf SST amplifies storm systems and coastal erosion"))
+    t2.append(manual("Drought Conditions", "see agr.gc.ca/drought-watch",
         source="Agriculture and Agri-Food Canada", tier=2,
-        note="Drought affects potato crop yields — PEI's primary agricultural commodity"
-    ))
+        note="Drought affects potato crop yields — PEI's primary commodity"))
+    t3.append(manual("Fire Weather Index (PEI)", "see cwfis.cfs.nrcan.gc.ca",
+        source="Canadian Wildland Fire Information System", tier=3))
 
-    # ── Wildfire risk ────────────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Fire Weather Index (PEI)", "see cwfis.cfs.nrcan.gc.ca",
-        source="Canadian Wildland Fire Information System", tier=3
-    ))
-
-    return {
-        "tiers": {
-            "tier1": {"label": "Critical Infrastructure", "indicators": indicators_t1},
-            "tier2": {"label": "Secondary Systems",       "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals",      "indicators": indicators_t3},
-        }
-    }
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# SECTOR: FOOD & PRICES
-# ---------------------------------------------------------------------------
+# ── SECTOR: FOOD & PRICES ─────────────────────────────────────────────────────
 
 def scrape_food():
-    indicators_t1, indicators_t2, indicators_t3 = [], [], []
-
-    # ── Grocery price index ───────────────────────────────────────────────
-    # No real-time PEI-specific grocery API; use manual
-    indicators_t2.append(manual(
-        "Grocery Price Index (PEI)", "see statcan.gc.ca / GPEI",
+    t2, t3 = [], []
+    t2.append(manual("Grocery Price Index (PEI)", "see statcan.gc.ca",
         source="Statistics Canada", tier=2,
-        note="Island logistics premium: all non-local food crosses the Confederation Bridge"
-    ))
-
-    # ── Lobster / seafood landings ────────────────────────────────────────
-    indicators_t2.append(manual(
-        "Lobster Landings", "see GPEI Fisheries",
+        note="Island logistics premium: all non-local food crosses the Confederation Bridge"))
+    t2.append(manual("Lobster Landings", "see GPEI Fisheries",
         source="GPEI Fisheries and Communities", tier=2,
-        note="Spring season: late April–June. Fall season: August–October. Key economic driver."
-    ))
-
-    # ── Potato crop status ───────────────────────────────────────────────
-    indicators_t2.append(manual(
-        "Potato Crop Status", "see GPEI Agriculture",
+        note="Spring: late April–June. Fall: August–October."))
+    t2.append(manual("Potato Crop Status", "see GPEI Agriculture",
         source="GPEI Agriculture", tier=2,
-        note="~100,000 acres of potato production annually — PEI's dominant crop"
-    ))
-
-    # ── Food bank demand ─────────────────────────────────────────────────
-    indicators_t3.append(manual(
-        "Food Bank Usage (PEI)", "see foodbankspei.ca",
-        source="Food Banks PEI", tier=3
-    ))
-
-    return {
-        "tiers": {
-            "tier2": {"label": "Secondary Systems",  "indicators": indicators_t2},
-            "tier3": {"label": "Contextual Signals", "indicators": indicators_t3},
-        }
-    }
+        note="~100,000 acres annually — PEI's dominant crop"))
+    t3.append(manual("Food Bank Usage (PEI)", "see foodbankspei.ca",
+        source="Food Banks PEI", tier=3))
+    return {"tiers": {
+        "tier2": {"label": "Secondary Systems",  "indicators": t2},
+        "tier3": {"label": "Contextual Signals", "indicators": t3},
+    }}
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 def run():
-    print(f"[PII Scraper] {GENERATED}")
-
-    sectors = {}
-
+    print(f"[PII Scraper v2] {GENERATED}")
+    sectors  = {}
     scrapers = [
-        ("energy",             "Energy",              scrape_energy),
-        ("water",              "Water",               scrape_water),
-        ("health",             "Health",              scrape_health),
-        ("transport_logistics","Transport & Logistics",scrape_transport),
-        ("financial",          "Financial",           scrape_financial),
-        ("public_safety",      "Public Safety",       scrape_public_safety),
-        ("environment",        "Environment",         scrape_environment),
-        ("food",               "Food & Prices",       scrape_food),
+        ("energy",             "Energy",               scrape_energy),
+        ("water",              "Water",                scrape_water),
+        ("health",             "Health",               scrape_health),
+        ("transport_logistics","Transport & Logistics", scrape_transport),
+        ("financial",          "Financial",            scrape_financial),
+        ("public_safety",      "Public Safety",        scrape_public_safety),
+        ("environment",        "Environment",          scrape_environment),
+        ("food",               "Food & Prices",        scrape_food),
     ]
-
     for key, label, fn in scrapers:
         print(f"  Scraping {label}…")
         try:
-            sectors[key] = fn()
+            sectors[key]          = fn()
             sectors[key]["label"] = label
         except Exception:
-            print(f"  [ERROR] {label} sector failed:", file=sys.stderr)
+            print(f"  [ERROR] {label}:", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
-            sectors[key] = {
-                "label": label,
-                "tiers": {
-                    "tier1": {"label": "Critical Infrastructure", "indicators": [
-                        indicator(f"{label} data", "scraper error",
-                                  status="error", tier=1,
-                                  note="Scraper encountered an error — check logs")
-                    ]}
-                }
-            }
+            sectors[key] = {"label": label, "tiers": {"tier1": {
+                "label": "Critical Infrastructure",
+                "indicators": [indicator(f"{label} data", "scraper error",
+                               status="error", tier=1, note="Scraper error — check logs")]
+            }}}
 
-    output = {
-        "generated":  GENERATED,
-        "timestamp":  GENERATED,
-        "source":     "PEI Infrastructure Intelligence",
-        "sectors":    sectors
-    }
+    output = {"generated": GENERATED, "timestamp": GENERATED,
+              "source": "PEI Infrastructure Intelligence v2", "sectors": sectors}
 
-    dated_path  = Path(f"pii_data_{DATESTAMP}.json")
-    latest_path = Path("pii_data_latest.json")
-
-    for p in [dated_path, latest_path]:
+    for p in [Path(f"pii_data_{DATESTAMP}.json"), Path("pii_data_latest.json")]:
         p.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"  Wrote {p}")
-
-    print("[PII Scraper] Done.")
+    print("[PII Scraper v2] Done.")
 
 
 if __name__ == "__main__":
