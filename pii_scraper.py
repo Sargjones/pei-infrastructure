@@ -222,24 +222,7 @@ def fetch_statcan_cpi_pei():
     except Exception:
         return None, None, None
 
-def fetch_cmhc_vacancy():
-    """Charlottetown rental vacancy rate from CMHC HMiP API."""
-    url    = "https://api.cmhc-schl.gc.ca/housing/indicators/vacancy-rate"
-    params = {"geo_uid": "105", "year": TODAY.year}
-    r      = get(url, params=params)
-    if not r:
-        return None, None
-    try:
-        data    = r.json()
-        results = data.get("data", data.get("results", []))
-        if results:
-            latest = results[-1] if isinstance(results, list) else results
-            rate   = latest.get("vacancy_rate", latest.get("value"))
-            period = latest.get("year", latest.get("period", ""))
-            return float(rate), str(period)
-    except Exception:
-        pass
-    return None, None
+# fetch_cmhc_vacancy replaced by fetch_pei_vacancy() in scrape_housing()
 
 
 
@@ -1573,6 +1556,418 @@ def scrape_transport():
     }}
 
 
+
+# ── SECTOR: HOUSING ────────────────────────────────────────────────────────────
+
+
+def fetch_hmip_table(geo_id, geo_type, geo_name, table_id):
+    """
+    Scrape a CMHC Housing Market Information Portal table.
+    Returns dict of {period_label: {bedroom_type: value_str}}.
+
+    Confirmed working April 2026 via Thonny testing.
+    The HMiP portal renders HTML tables directly — no JSON API available.
+
+    TableId 2.2.1  = Vacancy Rate (%) — historical annual series
+    TableId 2.2.11 = Average Rent ($) — historical annual series
+    GeographyTypeId: 2=Province, 3=CMA
+    GeographyId: 11=PEI, 3300=Charlottetown CMA
+    """
+    url = (
+        "https://www03.cmhc-schl.gc.ca/hmip-pimh/en/TableMapChart/Table"
+        f"?TableId={table_id}&GeographyId={geo_id}"
+        f"&GeographyTypeId={geo_type}&DisplayAs=Table&GeograghyName={geo_name}"
+    )
+    try:
+        from bs4 import BeautifulSoup as _BS
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        if not r or not r.ok:
+            return None
+        soup = _BS(r.text, 'html.parser')
+        table = soup.find('table')
+        if not table:
+            return None
+        rows = table.find_all('tr')
+        if len(rows) < 2:
+            return None
+        col_heads = [th.get_text(strip=True)
+                     for th in rows[0].find_all(['th', 'td'])]
+        results = {}
+        for row in rows[1:]:
+            cells = [td.get_text(strip=True)
+                     for td in row.find_all(['td', 'th'])]
+            if not cells:
+                continue
+            # Values at odd indices, reliability codes at even indices after col 0
+            results[cells[0]] = dict(zip(col_heads[1::2], cells[1::2]))
+        return results
+    except Exception as e:
+        print(f"  [WARN] HMiP table {table_id} geo={geo_id}: {e}",
+              file=sys.stderr)
+        return None
+
+
+def _hmip_latest(table, col='Total'):
+    """Get the most recent non-empty value from an HMiP table dict."""
+    if not table:
+        return None, None
+    for period in sorted(table.keys(), reverse=True):
+        val_str = table[period].get(col, '').replace(',', '').replace('**', '').strip()
+        if val_str:
+            try:
+                return float(val_str), period
+            except ValueError:
+                continue
+    return None, None
+
+
+def fetch_pei_vacancy():
+    """
+    CMHC HMiP vacancy rates — PEI province and Charlottetown CMA.
+    TableId 2.2.1, annual October survey.
+
+    Confirmed values (October 2025):
+      PEI province:      Total=2.5%, 2BR=1.1%
+      Charlottetown CMA: Total=2.0%, 2BR=0.6%
+    Balanced market threshold: 3.5-4.0%
+    Crisis threshold: <1.0%
+    """
+    pei  = fetch_hmip_table(11,   2, "Prince+Edward+Island", "2.2.1")
+    chrl = fetch_hmip_table(3300, 3, "Charlottetown",        "2.2.1")
+
+    pei_total,  pei_period  = _hmip_latest(pei,  'Total')
+    chrl_total, chrl_period = _hmip_latest(chrl, 'Total')
+    pei_2br,    _           = _hmip_latest(pei,  '2 Bedroom')
+    chrl_2br,   _           = _hmip_latest(chrl, '2 Bedroom')
+
+    if pei_total is not None:
+        print(f"  [Vacancy] PEI={pei_total}% ({pei_period}) "
+              f"Chrl={chrl_total}% ({chrl_period})", file=sys.stderr)
+
+    return {
+        'pei_total':    pei_total,
+        'pei_2br':      pei_2br,
+        'pei_period':   pei_period,
+        'chrl_total':   chrl_total,
+        'chrl_2br':     chrl_2br,
+        'chrl_period':  chrl_period,
+    }
+
+
+def fetch_pei_avg_rent():
+    """
+    CMHC HMiP average rent — PEI province and Charlottetown CMA.
+    TableId 2.2.11, annual October survey.
+
+    Confirmed values (October 2025):
+      PEI province:      2BR=$1,052  Total=$1,331
+      Charlottetown CMA: 2BR=$1,066  Total=$1,354
+    """
+    pei  = fetch_hmip_table(11,   2, "Prince+Edward+Island", "2.2.11")
+    chrl = fetch_hmip_table(3300, 3, "Charlottetown",        "2.2.11")
+
+    pei_2br,    pei_period  = _hmip_latest(pei,  '2 Bedroom')
+    chrl_2br,   chrl_period = _hmip_latest(chrl, '2 Bedroom')
+    pei_total,  _           = _hmip_latest(pei,  'Total')
+    chrl_total, _           = _hmip_latest(chrl, 'Total')
+
+    if pei_2br:
+        print(f"  [Rent] PEI 2BR=${pei_2br} ({pei_period}) "
+              f"Chrl 2BR=${chrl_2br}", file=sys.stderr)
+
+    return {
+        'pei_2br':    pei_2br,
+        'pei_total':  pei_total,
+        'pei_period': pei_period,
+        'chrl_2br':   chrl_2br,
+        'chrl_total': chrl_total,
+    }
+
+
+def fetch_pei_housing_starts():
+    """
+    Housing starts — PEI annual (StatCan 34-10-0126-01) and
+    monthly trailing-12-month (StatCan 34-10-0135-01).
+    Both are small CSVs in zip archives (~100KB and ~600KB).
+
+    Confirmed working April 2026 via Thonny testing.
+
+    Annual 2024: 1,694 starts (record high since 1970s)
+    Annual 2025: 1,769 starts (continued momentum)
+    Provincial target: 2,000/year to meet demand
+    """
+    import zipfile as _zf, io as _io, csv as _csv
+
+    def _fetch_csv_zip(url):
+        try:
+            r = requests.get(url, headers=HEADERS, timeout=30)
+            if not r or not r.ok:
+                return None
+            with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+                with z.open(z.namelist()[0]) as f:
+                    reader = _csv.DictReader(
+                        _io.TextIOWrapper(f, encoding='utf-8-sig'))
+                    return list(reader)
+        except Exception as e:
+            print(f"  [WARN] housing starts CSV: {e}", file=sys.stderr)
+            return None
+
+    result = {}
+
+    # Annual starts
+    annual = _fetch_csv_zip(
+        "https://www150.statcan.gc.ca/n1/tbl/csv/34100126-eng.zip")
+    if annual:
+        pei_annual = [r for r in annual
+                      if 'Prince Edward Island' in r.get('GEO', '')
+                      and 'Housing starts' in r.get('Housing estimates', '')
+                      and 'Total' in r.get('Type of unit', '')]
+        pei_annual.sort(key=lambda r: r.get('REF_DATE', ''))
+        if pei_annual:
+            latest = pei_annual[-1]
+            try:
+                result['annual_starts'] = int(float(latest['VALUE']))
+                result['annual_year']   = latest['REF_DATE']
+            except (ValueError, KeyError):
+                pass
+            # Previous year for YoY change
+            if len(pei_annual) >= 2:
+                prev = pei_annual[-2]
+                try:
+                    result['prev_starts'] = int(float(prev['VALUE']))
+                    result['prev_year']   = prev['REF_DATE']
+                except (ValueError, KeyError):
+                    pass
+
+    # Monthly — trailing 12-month sum
+    monthly = _fetch_csv_zip(
+        "https://www150.statcan.gc.ca/n1/tbl/csv/34100135-eng.zip")
+    if monthly:
+        pei_monthly = [r for r in monthly
+                       if 'Prince Edward Island' in r.get('GEO', '')
+                       and 'Total' in r.get('Type of unit', '')
+                       and 'Seasonally' not in r.get('Seasonal adjustment', '')]
+        pei_monthly.sort(key=lambda r: r.get('REF_DATE', ''))
+        if pei_monthly:
+            result['latest_month'] = pei_monthly[-1].get('REF_DATE', '')
+            # Trailing 12-month sum
+            last_12 = pei_monthly[-12:]
+            vals = []
+            for row in last_12:
+                try:
+                    vals.append(float(row['VALUE']))
+                except (ValueError, KeyError):
+                    pass
+            if vals:
+                result['trailing_12m'] = int(sum(vals))
+
+    if result:
+        print(f"  [Starts] annual={result.get('annual_starts')} "
+              f"({result.get('annual_year')}) "
+              f"trailing12m={result.get('trailing_12m')}", file=sys.stderr)
+
+    return result or None
+
+
+def fetch_pei_population():
+    """
+    PEI quarterly population estimate from StatCan WDS vector v8.
+    Table 17-10-0009-01, quarterly.
+
+    Uses the WDS vector endpoint (POST) — tiny request, no CSV download needed.
+    Vector v8 = Prince Edward Island confirmed April 2026.
+
+    Recent trend: peaked ~182,657 (Jul 2025), declining due to
+    NPR exodus following federal immigration policy changes.
+    """
+    try:
+        r = requests.post(
+            "https://www150.statcan.gc.ca/t1/wds/rest/"
+            "getDataFromVectorsAndLatestNPeriods",
+            json=[{"vectorId": 8, "latestN": 5}],
+            headers={**HEADERS,
+                     "Content-Type": "application/json",
+                     "Accept": "application/json"},
+            timeout=TIMEOUT
+        )
+        if not r or not r.ok:
+            return None
+        d = r.json()
+        if not d or d[0].get('status') != 'SUCCESS':
+            return None
+        pts = d[0]['object'].get('vectorDataPoint', [])
+        if not pts:
+            return None
+        pts.sort(key=lambda p: p.get('refPer', ''))
+        latest  = pts[-1]
+        prev    = pts[-2] if len(pts) >= 2 else None
+        pop     = int(float(latest['value']))
+        pop_chg = (int(float(latest['value'])) - int(float(prev['value']))
+                   if prev else None)
+        print(f"  [Pop] PEI {latest['refPer']}: {pop:,} "
+              f"(chg={pop_chg:+,})" if pop_chg else
+              f"  [Pop] PEI {latest['refPer']}: {pop:,}", file=sys.stderr)
+        return {
+            'population': pop,
+            'period':     latest['refPer'][:7],   # "2026-01"
+            'change_qtr': pop_chg,
+            'prev_pop':   int(float(prev['value'])) if prev else None,
+            'prev_period': prev['refPer'][:7] if prev else None,
+        }
+    except Exception as e:
+        print(f"  [WARN] PEI population WDS: {e}", file=sys.stderr)
+        return None
+
+
+def scrape_housing():
+    t1, t2, t3 = [], [], []
+
+    vacancy = fetch_pei_vacancy()
+    rent    = fetch_pei_avg_rent()
+    starts  = fetch_pei_housing_starts()
+    pop     = fetch_pei_population()
+
+    # ── Tier 1: Charlottetown vacancy rate — the headline indicator ───────────
+    chrl_vac = vacancy.get('chrl_total') if vacancy else None
+    pei_vac  = vacancy.get('pei_total')  if vacancy else None
+    vac_period = vacancy.get('chrl_period', '') if vacancy else ''
+
+    if chrl_vac is not None:
+        # Balanced market: 3.5–4.0% | Crisis: <1.0% | Tight: <2.0%
+        if chrl_vac < 1.0:
+            vac_status = "alert"
+            vac_note   = (f"Crisis-level vacancy — fewer than 1 in 100 units available. "
+                          f"Renters face extreme pressure.")
+        elif chrl_vac < 2.0:
+            vac_status = "warn"
+            vac_note   = (f"Very tight rental market — well below the 3.5% "
+                          f"balanced-market threshold.")
+        elif chrl_vac < 3.5:
+            vac_status = "warn"
+            vac_note   = "Below balanced-market threshold of 3.5–4.0%."
+        else:
+            vac_status = "ok"
+            vac_note   = ""
+
+        chrl_2br = vacancy.get('chrl_2br')
+        ctx_parts = []
+        if pei_vac is not None:
+            ctx_parts.append(f"PEI province: {pei_vac}%")
+        if chrl_2br is not None:
+            ctx_parts.append(f"2BR: {chrl_2br}%")
+        ctx_parts.append("Balanced market: 3.5–4.0%")
+
+        t1.append(indicator("Charlottetown Vacancy Rate", f"{chrl_vac}",
+            unit=f"% ({vac_period})",
+            status=vac_status,
+            note=vac_note,
+            context=" · ".join(ctx_parts),
+            source="CMHC Housing Market Information Portal (annual Oct survey)",
+            tier=1, date=GENERATED))
+    else:
+        t1.append(manual("Charlottetown Vacancy Rate",
+            "see cmhc-schl.gc.ca",
+            source="CMHC HMiP", tier=1))
+
+    # ── Tier 2: Average rent, housing starts, population ─────────────────────
+    # Average 2BR rent — Charlottetown
+    chrl_2br_rent = rent.get('chrl_2br') if rent else None
+    rent_period   = rent.get('chrl_period', '') if rent else ''
+    if chrl_2br_rent is not None:
+        # Context: 2022=$927, 2023=$910, 2024=$1,004, 2025=$1,066 (Charlottetown)
+        rent_status = ("alert" if chrl_2br_rent > 1400 else
+                       "warn"  if chrl_2br_rent > 1100 else "ok")
+        pei_2br_rent = rent.get('pei_2br')
+        rent_ctx = []
+        if pei_2br_rent:
+            rent_ctx.append(f"PEI province avg: ${pei_2br_rent:,.0f}")
+        rent_ctx.append("2022 baseline: $927")
+        t2.append(indicator("Avg 2BR Rent — Charlottetown", f"${chrl_2br_rent:,.0f}",
+            unit=f"per month ({rent_period})",
+            status=rent_status,
+            note=(f"${chrl_2br_rent - 927:+,.0f} vs 2022 baseline"
+                  if chrl_2br_rent else ""),
+            context=" · ".join(rent_ctx),
+            source="CMHC Housing Market Information Portal",
+            tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Avg 2BR Rent — Charlottetown",
+            "see cmhc-schl.gc.ca", source="CMHC HMiP", tier=2))
+
+    # Housing starts — annual
+    if starts and starts.get('annual_starts'):
+        ann   = starts['annual_starts']
+        yr    = starts.get('annual_year', '')
+        prev  = starts.get('prev_starts')
+        t12m  = starts.get('trailing_12m')
+        # Target: 2,000/yr. Record: 1,769 (2025)
+        start_status = ("ok"   if ann >= 1500 else
+                        "warn" if ann >= 1000 else "alert")
+        chg_str = f"{ann - prev:+,} vs {starts.get('prev_year','prev yr')}" if prev else ""
+        ctx = [f"Provincial target: 2,000/yr"]
+        if t12m:
+            ctx.append(f"Trailing 12m: {t12m:,}")
+        t2.append(indicator("Housing Starts — PEI", f"{ann:,}",
+            unit=f"units ({yr})",
+            status=start_status,
+            note=(chg_str if chg_str else ""),
+            context=" · ".join(ctx),
+            source="Statistics Canada 34-10-0126-01",
+            tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Housing Starts — PEI",
+            "see statcan.gc.ca", source="StatCan", tier=2))
+
+    # Population — quarterly
+    if pop and pop.get('population'):
+        population = pop['population']
+        period     = pop.get('period', '')
+        chg        = pop.get('change_qtr')
+        # PEI target: cap at 200,000 by 2030; peaked ~182,657 (Jul 2025)
+        pop_status = "ok"  # pure informational
+        chg_str = f"{chg:+,} vs prev quarter" if chg is not None else ""
+        if chg is not None and chg < -200:
+            pop_status = "warn"
+        t2.append(indicator("PEI Population", f"{population:,}",
+            unit=f"persons ({period})",
+            status=pop_status,
+            note=(f"Declining — NPR exodus following federal immigration cuts"
+                  if chg is not None and chg < -100 else
+                  f"Growing" if chg is not None and chg > 300 else ""),
+            context=(f"{chg_str} · Provincial cap target: 200,000 by 2030"
+                     if chg_str else "Provincial cap target: 200,000 by 2030"),
+            source="Statistics Canada 17-10-0009-01 (vector v8)",
+            tier=2, date=GENERATED))
+    else:
+        t2.append(manual("PEI Population",
+            "see statcan.gc.ca", source="StatCan", tier=2))
+
+    # ── Tier 3: PEI province vacancy, rent context ────────────────────────────
+    if pei_vac is not None:
+        t3.append(indicator("PEI Province Vacancy Rate", f"{pei_vac}",
+            unit=f"% ({vacancy.get('pei_period','')})",
+            status=("alert" if pei_vac < 1.0 else
+                    "warn"  if pei_vac < 2.0 else "ok"),
+            context=(f"2BR: {vacancy.get('pei_2br')}% · "
+                     f"Charlottetown: {chrl_vac}% · "
+                     f"Balanced: 3.5–4.0%"),
+            source="CMHC HMiP", tier=3, date=GENERATED))
+    else:
+        t3.append(manual("PEI Province Vacancy Rate",
+            "see cmhc-schl.gc.ca", source="CMHC HMiP", tier=3))
+
+    t3.append(manual("Social Housing Registry",
+        "see princeedwardisland.ca",
+        source="PEI Housing Corporation annual report", tier=3,
+        note="Wait list reduced to 389 (March 2025) — lowest in over a decade"))
+
+    return {"tiers": {
+        "tier1": {"label": "Critical Infrastructure", "indicators": t1},
+        "tier2": {"label": "Secondary Systems",       "indicators": t2},
+        "tier3": {"label": "Contextual Signals",      "indicators": t3},
+    }}
+
+
 # ── SECTOR: FINANCIAL ─────────────────────────────────────────────────────────
 
 def scrape_financial():
@@ -1889,6 +2284,7 @@ def run():
         ("water",              "Water",                scrape_water),
         ("health",             "Health",               scrape_health),
         ("transport_logistics","Transport & Logistics", scrape_transport),
+        ("housing",            "Housing",              scrape_housing),
         ("financial",          "Financial",            scrape_financial),
         ("public_safety",      "Public Safety",        scrape_public_safety),
         ("environment",        "Environment",          scrape_environment),
