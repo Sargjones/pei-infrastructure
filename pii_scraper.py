@@ -680,16 +680,16 @@ def fetch_maritime_electric_grid_status():
       Orange → Warning      (approaching max capacity within 24h)
       Red    → Load Shedding (rotating outages active)
 
-    The page uses JavaScript to render the coloured indicator, but the
-    static HTML contains descriptive text that changes with the status level.
-    We look for key phrases that only appear when status is elevated.
+    IMPORTANT: The page contains permanent FAQ text that describes all four
+    levels at all times. We must strip the FAQ/explanatory section and only
+    scan the live status indicator region at the top of the page.
 
-    Returns dict: level ("normal"|"watch"|"warning"|"load_shedding"),
-                  label (str), colour (str) — or None on failure.
+    Strategy: take only the first ~3000 chars of page text (above the FAQ),
+    and look for CSS class signals or active-state phrases there.
+
+    Returns dict: level, label, colour, status — or None on failure.
     """
-    import re as _re
     url = "https://www.maritimeelectric.com/outages/outages/grid-status/"
-    # Try with a browser-like User-Agent — ME returns 403 to bots
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -704,45 +704,80 @@ def fetch_maritime_electric_grid_status():
         r = requests.get(url, headers=headers, timeout=TIMEOUT)
         if not r or r.status_code != 200:
             return None
-        text = r.text.lower()
 
-        # Look for specific phrases that only appear in elevated states.
-        # The static page always contains explanatory text for all four levels —
-        # we look for dynamic content: active class names, highlighted elements,
-        # or JS-rendered state indicators.
+        raw = r.text
 
-        # Key signals for each level (order matters — check most severe first):
-        if any(p in text for p in [
-            "rotating outages are in effect",
-            "controlled rotating outages",
-            "load shedding is in effect",
+        # ── Strip FAQ / explanatory section ──────────────────────────────────
+        # The FAQ starts around "What is load shedding" or "Frequently Asked"
+        # Everything before that is the live status widget area.
+        faq_markers = [
+            "what is load shedding",
+            "frequently asked",
+            "load shedding, or rotating outages, is a last resort",
+            "rotating outages will only be used as a last resort",
+        ]
+        live_section = raw.lower()
+        for marker in faq_markers:
+            idx = live_section.find(marker)
+            if idx > 500:   # only truncate if marker found well into page
+                live_section = live_section[:idx]
+                break
+
+        # ── CSS class signals (most reliable — JS sets active class) ─────────
+        # Check full raw HTML for class-based signals (these won't appear in FAQ)
+        raw_lower = raw.lower()
+
+        if any(p in raw_lower for p in [
             'class="red active"', 'class="active red"',
-            'data-status="red"', "status-red active",
+            "status-red active", 'data-level="red"',
+            "grid-status--red active", "indicator--red active",
         ]):
             return {"level": "load_shedding", "label": "Load Shedding",
                     "colour": "red", "status": "alert"}
 
-        if any(p in text for p in [
-            "power system is forecast to approach maximum capacity",
-            "approach maximum capacity within the next 24",
-            "conservation is required",
+        if any(p in raw_lower for p in [
             'class="orange active"', 'class="active orange"',
-            'data-status="orange"', "status-orange active",
+            "status-orange active", 'data-level="orange"',
+            "grid-status--orange active", "indicator--orange active",
         ]):
             return {"level": "warning", "label": "Warning",
                     "colour": "orange", "status": "warn"}
 
-        if any(p in text for p in [
-            "higher than usual demand within the next 72",
-            "forecast to have higher than usual demand",
-            "conservation if asked",
+        if any(p in raw_lower for p in [
             'class="yellow active"', 'class="active yellow"',
-            'data-status="yellow"', "status-yellow active",
+            "status-yellow active", 'data-level="yellow"',
+            "grid-status--yellow active", "indicator--yellow active",
         ]):
             return {"level": "watch", "label": "Watch",
                     "colour": "yellow", "status": "warn"}
 
-        # If we successfully fetched the page but found no elevated signals → Normal
+        # ── Phrase signals in live section only (pre-FAQ text) ───────────────
+        # These phrases only appear above the FAQ when the status is elevated
+        if any(p in live_section for p in [
+            "controlled rotating outages are in effect",
+            "load shedding is currently active",
+            "rotating outages are currently",
+        ]):
+            return {"level": "load_shedding", "label": "Load Shedding",
+                    "colour": "red", "status": "alert"}
+
+        if any(p in live_section for p in [
+            "conservation is required now",
+            "approaching maximum capacity",
+            "outages may begin within",
+        ]):
+            return {"level": "warning", "label": "Warning",
+                    "colour": "orange", "status": "warn"}
+
+        if any(p in live_section for p in [
+            "conservation may be requested",
+            "higher than usual demand is expected",
+            "watch has been issued",
+        ]):
+            return {"level": "watch", "label": "Watch",
+                    "colour": "yellow", "status": "warn"}
+
+        # Successfully fetched and no elevated signals found → Normal
         return {"level": "normal", "label": "Normal",
                 "colour": "green", "status": "ok"}
 
@@ -817,15 +852,33 @@ def scrape_energy():
     if gsi:
         gsi_val    = gsi["label"]
         gsi_status = gsi["status"]
-        colour     = gsi["colour"]
         gsi_note   = {
             "load_shedding": "Rotating outages active — reduce all non-essential consumption now",
             "warning":       "Approaching max capacity within 24h — turn off high-draw appliances",
             "watch":         "Higher demand forecast within 72h — prepare to conserve if asked",
             "normal":        "",
         }.get(gsi.get("level", "normal"), "")
+
+        # ── MW sanity check — override page scrape if live data contradicts it ──
+        # Load shedding requires: load near/above 300 MW AND fossil fuel running
+        # AND/OR outage customers > 0. If load is low and fossil is 0, it's Normal.
+        if grid and gsi.get("level") == "load_shedding":
+            load_mw   = grid.get("load",   0)
+            fossil_mw = grid.get("fossil", 0)
+            if load_mw < 340 and fossil_mw < 5:
+                print(f"  [GSI] Overriding false alert: load={load_mw} fossil={fossil_mw}",
+                      file=sys.stderr)
+                gsi_val, gsi_status, gsi_note = "Normal", "ok", ""
+                gsi["level"] = "normal"
+
+        # Warning also requires load >= 270 MW to be plausible
+        if grid and gsi.get("level") == "warning":
+            if grid.get("load", 0) < 250:
+                gsi_val, gsi_status, gsi_note = "Normal", "ok", ""
+                gsi["level"] = "normal"
+
     else:
-        # Fallback: derive status from live MW load data if page scrape failed
+        # Fallback: derive status entirely from live MW load data
         if grid and grid.get("load", 0) >= 380:
             gsi_val, gsi_status = "Critical Load", "alert"
             gsi_note = f"Load {grid['load']:.0f} MW — load shedding risk"
