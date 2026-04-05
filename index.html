@@ -10,9 +10,9 @@
 <style>
 :root {
   /* PEI palette: lighthouse beach — sky blue, sea foam, warm white, sandy gold */
-  --bg:        #deeef7;          /* open sky blue */
-  --surface:   #f0f8fd;          /* sea foam white */
-  --surface2:  #c8dff0;          /* deeper coastal blue */
+  --bg:        #eef6fb;          /* light sky blue — softer, waves less dramatic */
+  --surface:   #f7fbfe;          /* near-white sea foam */
+  --surface2:  #daedf7;          /* slightly deeper for contrast */
   --border:    rgba(30,80,130,0.13);
   --border2:   rgba(30,80,130,0.26);
 
@@ -85,12 +85,24 @@ body {
   color: var(--text1);
   font-size: 16px;
   line-height: 1.65;
-  background-image:
-    radial-gradient(ellipse 100% 50% at 50% 0%, rgba(255,255,255,0.40) 0%, transparent 65%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='30'%3E%3Cpath d='M0 18 Q15 8 30 18 Q45 28 60 18 Q75 8 90 18 Q105 28 120 18' fill='none' stroke='rgba(255,255,255,0.20)' stroke-width='1.5'/%3E%3C/svg%3E");
-  background-size: auto, 120px 30px;
-  background-attachment: fixed, fixed;
   min-height: 100vh;
+}
+
+/* Subtle wave overlay — gentle across both modes */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.10;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='40'%3E%3Cpath d='M0 24 Q20 10 40 24 Q60 38 80 24 Q100 10 120 24 Q140 38 160 24' fill='none' stroke='%231558a0' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-size: 160px 40px;
+  background-attachment: fixed;
+}
+
+@media (prefers-color-scheme: dark) {
+  body::after { opacity: 0.06; }
 }
 
 a { color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: .9em; }
@@ -136,9 +148,11 @@ a:hover { text-decoration: underline; }
 
 /* PEI wave mark */
 .topbar-mark {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
+  border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.15);
 }
 
 .topbar-wordmark {
@@ -854,13 +868,38 @@ a:hover { text-decoration: underline; }
 <!-- ── TOPBAR ─────────────────────────────────────────────────────────── -->
 <div class="topbar">
   <div class="topbar-left">
-    <!-- PEI wave/wave mark -->
-    <svg class="topbar-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect width="32" height="32" rx="6" fill="var(--accent)" opacity=".12"/>
-      <path d="M4 22 Q8 16 12 20 Q16 24 20 18 Q24 12 28 16" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-      <path d="M4 26 Q8 20 12 24 Q16 28 20 22 Q24 16 28 20" stroke="var(--accent)" stroke-width="1.2" stroke-linecap="round" fill="none" opacity=".5"/>
-      <circle cx="16" cy="11" r="3.5" fill="var(--accent)" opacity=".8"/>
-      <path d="M13 11 Q16 7 19 11" stroke="var(--accent)" stroke-width="1" fill="none" opacity=".5"/>
+    <!-- PEI Lighthouse — inline SVG logo -->
+    <svg class="topbar-mark" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-label="PEI lighthouse" role="img">
+      <rect width="48" height="48" rx="8" fill="#deeef7"/>
+      <ellipse cx="24" cy="46" rx="28" ry="8" fill="#1a6898" opacity="0.25"/>
+      <rect x="0" y="40" width="48" height="12" fill="#1a6898" opacity="0.18"/>
+      <path d="M2 41 Q8 39 14 41 Q20 43 26 41 Q32 39 38 41 Q44 43 48 41" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.5"/>
+      <path d="M0 44 Q6 42 12 44 Q18 46 24 44 Q30 42 36 44 Q42 46 48 44" fill="none" stroke="#ffffff" stroke-width="0.6" opacity="0.35"/>
+      <rect x="16" y="37" width="16" height="3" rx="1" fill="#c8a878"/>
+      <rect x="14" y="39" width="20" height="2" rx="1" fill="#b8987a"/>
+      <path d="M19 37 L17 16 L31 16 L29 37 Z" fill="#f5f0e8"/>
+      <path d="M18.6 33 L17.8 29 L30.2 29 L29.4 33 Z" fill="#C8102E" opacity="0.85"/>
+      <path d="M18.2 25 L17.4 21 L30.6 21 L29.8 25 Z" fill="#C8102E" opacity="0.85"/>
+      <rect x="15" y="14" width="18" height="2.5" rx="0.5" fill="#8a9aaa"/>
+      <rect x="17" y="9" width="14" height="5.5" rx="0.5" fill="#1c3a52"/>
+      <line x1="20" y1="9" x2="20" y2="14.5" stroke="#8a9aaa" stroke-width="0.5"/>
+      <line x1="24" y1="9" x2="24" y2="14.5" stroke="#8a9aaa" stroke-width="0.5"/>
+      <line x1="28" y1="9" x2="28" y2="14.5" stroke="#8a9aaa" stroke-width="0.5"/>
+      <ellipse cx="24" cy="11.5" rx="3.5" ry="2.5" fill="#FFD060" opacity="0.9"/>
+      <ellipse cx="24" cy="11.5" rx="2" ry="1.5" fill="#FFFFFF" opacity="0.8"/>
+      <path d="M16 9 Q24 4 32 9 Z" fill="#8a9aaa"/>
+      <line x1="24" y1="4.5" x2="24" y2="2" stroke="#8a9aaa" stroke-width="0.8"/>
+      <circle cx="24" cy="2" r="0.8" fill="#8a9aaa"/>
+      <path d="M17 11.5 L5 7"  stroke="#FFD060" stroke-width="1.2" opacity="0.5" stroke-linecap="round"/>
+      <path d="M17 11.5 L4 12" stroke="#FFD060" stroke-width="0.9" opacity="0.35" stroke-linecap="round"/>
+      <path d="M17 11.5 L5 16" stroke="#FFD060" stroke-width="0.7" opacity="0.25" stroke-linecap="round"/>
+      <path d="M31 11.5 L43 7"  stroke="#FFD060" stroke-width="1.2" opacity="0.5" stroke-linecap="round"/>
+      <path d="M31 11.5 L44 12" stroke="#FFD060" stroke-width="0.9" opacity="0.35" stroke-linecap="round"/>
+      <path d="M31 11.5 L43 16" stroke="#FFD060" stroke-width="0.7" opacity="0.25" stroke-linecap="round"/>
+      <rect x="21.5" y="32" width="5" height="5" rx="2.5" fill="#1c3a52"/>
+      <rect x="21.5" y="26.5" width="5" height="3.5" rx="1" fill="#1c3a52"/>
+      <line x1="24" y1="26.5" x2="24" y2="30" stroke="#8a9aaa" stroke-width="0.5"/>
+      <rect width="48" height="48" rx="8" fill="none" stroke="rgba(21,88,160,0.20)" stroke-width="1"/>
     </svg>
     <div class="topbar-wordmark">
       <span class="topbar-title">PEI Infrastructure Intelligence</span>
