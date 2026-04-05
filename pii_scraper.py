@@ -560,47 +560,194 @@ def fetch_statcan_gasoline_charlottetown():
     return None
 
 def fetch_gpei_energy():
-    """POST to GPEI workflow API — Maritime Electric 15-min feed."""
+    """
+    POST to GPEI workflow API — Maritime Electric 15-min feed.
+    POST https://wdf.princeedwardisland.ca/prod/workflow
+    Body: {"featureName": "WindEnergy"}
+
+    Response structure (per Rukavina 2018 docs — still current):
+      {"components": [
+        {"type": 7, "data": {
+            "actualValue": 186,
+            "header": "Total On-Island Load: 186.59 MW",
+            "maxValue": 300, ...}},
+        {"type": 5, "data": {"text": "Last updated October 31, 2018 10:44 AM"}}
+      ]}
+
+    The MW value lives in the "header" string — parse it from there.
+    Falls back to Rukavina's proxy at energy.reinvented.net if GPEI fails.
+    """
+    import re as _re
+
+    def parse_mw(header_str):
+        """Extract float MW value from a header string like 'Total On-Island Load: 186.59 MW'"""
+        m = _re.search(r"([\d.]+)\s*MW", str(header_str))
+        return float(m.group(1)) if m else None
+
+    # ── Primary: GPEI workflow API ───────────────────────────────────────────
     r = post_json("https://wdf.princeedwardisland.ca/prod/workflow",
                   {"featureName": "WindEnergy"})
-    if not r:
-        return None
+    if r:
+        try:
+            data   = r.json()
+            comps  = data.get("components", [])
+            result = {}
+            update_time = None
+
+            for comp in comps:
+                d = comp.get("data", {})
+                if not isinstance(d, dict):
+                    continue
+                header = d.get("header", "")
+                text   = d.get("text", "")
+
+                # Extract timestamp from "Last updated ..." text component
+                if text and ("last updated" in text.lower() or "updated" in text.lower()):
+                    update_time = text.replace("Last updated", "").replace("last updated", "").strip()
+                    continue
+
+                # Parse MW from header string
+                hdr_lower = header.lower()
+                mw = parse_mw(header)
+                if mw is None:
+                    # Also try actualValue field scaled by header context
+                    av = d.get("actualValue")
+                    if av is not None:
+                        # actualValue is rounded integer; use header for precision
+                        mw = float(av)
+
+                if mw is None:
+                    continue
+
+                if   "total on-island load" in hdr_lower:           result["load"]         = mw
+                elif "total on-island wind generation" in hdr_lower: result["wind"]         = mw
+                elif "wind power used on island" in hdr_lower:       result["wind_used"]    = mw
+                elif "wind power exported" in hdr_lower:             result["wind_export"]  = mw
+                elif "fossil fuel generation" in hdr_lower:         result["fossil"]       = mw
+                elif "solar" in hdr_lower and "generation" in hdr_lower: result["solar"]   = mw
+                elif "utility" in hdr_lower and "solar" in hdr_lower:    result["solar"]   = mw
+
+            if result.get("load"):
+                result["update_time"] = update_time or GENERATED
+                result["source"]      = "Maritime Electric via GPEI"
+                print(f"  [GPEI] Load={result.get('load')} Wind={result.get('wind')} "
+                      f"Fossil={result.get('fossil')} Updated={update_time}", file=sys.stderr)
+                return result
+        except Exception as e:
+            print(f"  [WARN] GPEI parse — {e}", file=sys.stderr)
+
+    # ── Fallback: Rukavina proxy (energy.reinvented.net) ────────────────────
+    # Self-hosted by Peter Rukavina, updated every 15 min from the same GPEI source.
+    # Clean JSON — no parsing needed.
+    print("  [GPEI] Primary failed — trying Rukavina proxy", file=sys.stderr)
+    r2 = get("https://energy.reinvented.net/pei-energy/govpeca/get-govpeca-json.php?format=json")
+    if r2:
+        try:
+            d = r2.json()
+            load   = float(d.get("on-island-load",   0))
+            wind   = float(d.get("on-island-wind",   0))
+            fossil = float(d.get("on-island-fossil", 0))
+            # Proxy doesn't include solar — set to 0
+            result = {
+                "load":        load,
+                "wind":        wind,
+                "solar":       0.0,
+                "fossil":      fossil,
+                "wind_used":   float(d.get("wind-local",   0)),
+                "wind_export": float(d.get("wind-export",  0)),
+                "update_time": d.get("updatetime_human", GENERATED),
+                "source":      "Maritime Electric via reinvented.net proxy",
+            }
+            if result["load"] > 0:
+                print(f"  [Rukavina proxy] Load={load} Wind={wind} Fossil={fossil}",
+                      file=sys.stderr)
+                return result
+        except Exception as e:
+            print(f"  [WARN] Rukavina proxy parse — {e}", file=sys.stderr)
+
+    print("  [WARN] Both GPEI sources failed", file=sys.stderr)
+    return None
+
+
+def fetch_maritime_electric_grid_status():
+    """
+    Scrape Maritime Electric Grid Status Index page for the current colour level.
+    URL: https://www.maritimeelectric.com/outages/outages/grid-status/
+
+    Four levels (per Maritime Electric / CBC Jan 2026):
+      Green  → Normal       (operating normally)
+      Yellow → Watch        (higher demand forecast within 72h)
+      Orange → Warning      (approaching max capacity within 24h)
+      Red    → Load Shedding (rotating outages active)
+
+    The page uses JavaScript to render the coloured indicator, but the
+    static HTML contains descriptive text that changes with the status level.
+    We look for key phrases that only appear when status is elevated.
+
+    Returns dict: level ("normal"|"watch"|"warning"|"load_shedding"),
+                  label (str), colour (str) — or None on failure.
+    """
+    import re as _re
+    url = "https://www.maritimeelectric.com/outages/outages/grid-status/"
+    # Try with a browser-like User-Agent — ME returns 403 to bots
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-CA,en;q=0.9",
+        "Referer": "https://www.maritimeelectric.com/",
+    }
     try:
-        data   = r.json()
-        comps  = data.get("components", [])
-        result = {}
-        for comp in comps:
-            d = comp.get("data") or comp.get("fields") or comp
-            if not isinstance(d, dict):
-                continue
-            for key, val in d.items():
-                lk = key.lower()
-                try:
-                    fval = float(str(val).replace(",", ""))
-                except (ValueError, TypeError):
-                    if "time" in lk or "update" in lk:
-                        result["update_time"] = str(val)
-                    continue
-                if   "load" in lk and "on" in lk:              result["load"]   = fval
-                elif "wind" in lk and ("gen" in lk or "total" in lk): result["wind"] = fval
-                elif "solar" in lk and "gen" in lk:            result["solar"]  = fval
-                elif "fossil" in lk or ("fuel" in lk and "fossil" in lk): result["fossil"] = fval
-                elif "time" in lk or "update" in lk:           result["update_time"] = str(val)
-        # flat fallback
-        if not result:
-            for key, val in (data if isinstance(data, dict) else {}).items():
-                lk = key.lower()
-                try:
-                    fval = float(str(val).replace(",", ""))
-                except (ValueError, TypeError):
-                    continue
-                if   "load"   in lk: result["load"]   = fval
-                elif "wind"   in lk: result["wind"]   = fval
-                elif "solar"  in lk: result["solar"]  = fval
-                elif "fossil" in lk: result["fossil"] = fval
-        return result or None
+        r = requests.get(url, headers=headers, timeout=TIMEOUT)
+        if not r or r.status_code != 200:
+            return None
+        text = r.text.lower()
+
+        # Look for specific phrases that only appear in elevated states.
+        # The static page always contains explanatory text for all four levels —
+        # we look for dynamic content: active class names, highlighted elements,
+        # or JS-rendered state indicators.
+
+        # Key signals for each level (order matters — check most severe first):
+        if any(p in text for p in [
+            "rotating outages are in effect",
+            "controlled rotating outages",
+            "load shedding is in effect",
+            'class="red active"', 'class="active red"',
+            'data-status="red"', "status-red active",
+        ]):
+            return {"level": "load_shedding", "label": "Load Shedding",
+                    "colour": "red", "status": "alert"}
+
+        if any(p in text for p in [
+            "power system is forecast to approach maximum capacity",
+            "approach maximum capacity within the next 24",
+            "conservation is required",
+            'class="orange active"', 'class="active orange"',
+            'data-status="orange"', "status-orange active",
+        ]):
+            return {"level": "warning", "label": "Warning",
+                    "colour": "orange", "status": "warn"}
+
+        if any(p in text for p in [
+            "higher than usual demand within the next 72",
+            "forecast to have higher than usual demand",
+            "conservation if asked",
+            'class="yellow active"', 'class="active yellow"',
+            'data-status="yellow"', "status-yellow active",
+        ]):
+            return {"level": "watch", "label": "Watch",
+                    "colour": "yellow", "status": "warn"}
+
+        # If we successfully fetched the page but found no elevated signals → Normal
+        return {"level": "normal", "label": "Normal",
+                "colour": "green", "status": "ok"}
+
     except Exception as e:
-        print(f"  [WARN] GPEI parse — {e}", file=sys.stderr)
+        print(f"  [WARN] Maritime Electric grid status — {e}", file=sys.stderr)
         return None
 
 
@@ -665,34 +812,34 @@ def scrape_energy():
                 note="GPEI API unavailable — check maritimeelectric.com"))
         chart = None
 
-    # Grid Status Index (fixed: live status text only)
-    s = soup("https://www.maritimeelectric.com/outages/outages/grid-status/")
-    gsi_val, gsi_status, gsi_note = "Normal", "ok", ""
-    if s:
-        page = s.get_text(" ", strip=True)
-        m = re.search(
-            r"(?:current\s+status|grid\s+status\s+index)[:\s]+([A-Za-z][A-Za-z\s]{2,40}?)(?:\.|,|\n|$)",
-            page, re.I)
-        if m:
-            live = m.group(1).strip().lower()
-            if "load shed" in live or "rotating" in live:
-                gsi_val, gsi_status = "Load Shedding", "alert"
-                gsi_note = "Rotating outages active — reduce non-essential consumption now"
-            elif "elevated" in live:
-                gsi_val, gsi_status = "Elevated Concern", "warn"
-                gsi_note = "Grid under stress — conserve energy, especially 6–10am and 4–9pm"
-            elif "conservation" in live:
-                gsi_val, gsi_status = "Conservation Request", "warn"
-                gsi_note = "Maritime Electric requesting voluntary conservation"
-        elif grid and grid.get("load", 0) >= 380:
-            gsi_val, gsi_status, gsi_note = "Critical Load", "alert", f"Load {grid['load']:.0f} MW"
+    # ── Grid Status Index — Maritime Electric dedicated fetcher ──────────────
+    gsi = fetch_maritime_electric_grid_status()
+    if gsi:
+        gsi_val    = gsi["label"]
+        gsi_status = gsi["status"]
+        colour     = gsi["colour"]
+        gsi_note   = {
+            "load_shedding": "Rotating outages active — reduce all non-essential consumption now",
+            "warning":       "Approaching max capacity within 24h — turn off high-draw appliances",
+            "watch":         "Higher demand forecast within 72h — prepare to conserve if asked",
+            "normal":        "",
+        }.get(gsi.get("level", "normal"), "")
+    else:
+        # Fallback: derive status from live MW load data if page scrape failed
+        if grid and grid.get("load", 0) >= 380:
+            gsi_val, gsi_status = "Critical Load", "alert"
+            gsi_note = f"Load {grid['load']:.0f} MW — load shedding risk"
         elif grid and grid.get("load", 0) >= 300:
-            gsi_val, gsi_status, gsi_note = "High Demand", "warn", f"Load {grid['load']:.0f} MW at cable cap"
+            gsi_val, gsi_status = "High Demand", "warn"
+            gsi_note = f"Load {grid['load']:.0f} MW — at cable import cap"
+        else:
+            gsi_val, gsi_status, gsi_note = "Normal", "ok", ""
 
     t1.append(indicator("Grid Status Index", gsi_val, status=gsi_status, note=gsi_note,
         context="maritimeelectric.com/outages/outages/grid-status",
         source="Maritime Electric", tier=1,
-        banner="LOAD SHEDDING ACTIVE — rotating outages in progress" if gsi_status == "alert" else ""))
+        banner="LOAD SHEDDING ACTIVE — rotating outages in progress on PEI"
+               if gsi_status == "alert" and "load" in gsi_val.lower() else ""))
 
     # Outage customers
     s2    = soup("https://poweroutage.com/ca/utility/1370")
