@@ -1,6 +1,6 @@
 {
-  "generated": "2026-04-05 01:39 UTC",
-  "timestamp": "2026-04-05 01:39 UTC",
+  "generated": "2026-04-05 03:36 UTC",
+  "timestamp": "2026-04-05 03:36 UTC",
   "source": "PEI Infrastructure Intelligence v2",
   "sectors": {
     "energy": {
@@ -10,34 +10,33 @@
           "indicators": [
             {
               "label": "Island System Load",
-              "value": "246.1",
+              "value": "227.6",
               "unit": "MW",
               "status": "ok",
               "context": "Peak record: ~400 MW (Jan/Feb)",
-              "date": "2026-04-04 22:29:00",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 1,
               "muted": false
             },
             {
               "label": "NB Cable Utilization",
-              "value": "80.8",
-              "unit": "% of 300 MW cap  (243 MW imported)",
-              "status": "warn",
-              "note": "High cable utilization — grid stress elevated",
+              "value": "73.9",
+              "unit": "% of 300 MW cap  (222 MW imported)",
+              "status": "ok",
               "context": "4 subsea cables — hard physical limit",
-              "date": "2026-04-04 22:29:00",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 1,
               "muted": false
             },
             {
               "label": "Wind Generation",
-              "value": "3.6",
-              "unit": "MW  (1.5% of load)",
+              "value": "5.9",
+              "unit": "MW  (2.6% of load)",
               "status": "ok",
               "context": "~204 MW installed wind capacity on PEI",
-              "date": "2026-04-04 22:29:00",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 1,
               "muted": false
@@ -55,7 +54,7 @@
               "label": "Outage Customers",
               "value": "check map",
               "status": "manual",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "poweroutage.com / Maritime Electric",
               "tier": 1,
               "muted": false
@@ -71,7 +70,7 @@
               "unit": "MW",
               "status": "ok",
               "context": "Slemon Park, Sunbank + batteries",
-              "date": "2026-04-04 22:29:00",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
@@ -82,17 +81,17 @@
               "unit": "MW",
               "status": "ok",
               "context": "Combustion turbines — last resort backup",
-              "date": "2026-04-04 22:29:00",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
             },
             {
               "label": "NB Import",
-              "value": "243",
+              "value": "222",
               "unit": "MW  (cap: 300 MW)",
-              "status": "warn",
-              "date": "2026-04-04 22:29:00",
+              "status": "ok",
+              "date": "2026-04-05 00:29:00",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
@@ -117,7 +116,7 @@
               "status": "warn",
               "note": "Above 175¢/L — elevated heating cost burden on island households",
               "context": "~35% of PEI households rely on fuel oil for heat",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Natural Resources Canada — weekly retail prices",
               "tier": 3,
               "muted": false
@@ -134,14 +133,14 @@
         }
       },
       "chart_data": {
-        "load": 246.1,
-        "wind": 3.6,
+        "load": 227.6,
+        "wind": 5.9,
         "solar": 0.0,
         "fossil": 0.0,
-        "nb_import": 242.6,
+        "nb_import": 221.7,
         "cable_cap": 300,
         "peak_record": 400,
-        "updated": "2026-04-04 22:29:00"
+        "updated": "2026-04-05 00:29:00"
       },
       "label": "Energy"
     },
@@ -156,7 +155,7 @@
               "unit": "active",
               "status": "ok",
               "context": "100% groundwater province — unique in Canada",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "GPEI Environment, Energy and Climate Action",
               "tier": 1,
               "muted": false
@@ -233,7 +232,7 @@
               "label": "Respiratory Illness Activity",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Health PEI",
               "tier": 2,
               "muted": false
@@ -283,7 +282,7 @@
               "value": "Open",
               "status": "ok",
               "context": "12.9 km fixed link — primary supply corridor",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "confederationbridge.com",
               "tier": 1,
               "muted": false
@@ -295,11 +294,11 @@
           "indicators": [
             {
               "label": "Wind Gust (Bridge Area)",
-              "value": "9",
+              "value": "14",
               "unit": "km/h",
               "status": "ok",
-              "context": "Sustained: 6 km/h",
-              "date": "2026-04-05 01:39 UTC",
+              "context": "Sustained: 5 km/h",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Open-Meteo (Borden-Carleton)",
               "tier": 2,
               "muted": false
@@ -310,7 +309,7 @@
               "unit": "Wood Islands ↔ Pictou",
               "status": "manual",
               "context": "Seasonal alternate crossing (May–Dec) · 75 min",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "ferries.ca",
               "tier": 2,
               "muted": false
@@ -319,8 +318,8 @@
               "label": "Charlottetown Airport (YYG)",
               "value": "VFR",
               "status": "ok",
-              "context": "METAR: METAR CYYG 050100Z 06004KT 15SM SCT200 M04/M06 A3051 RM",
-              "date": "2026-04-05 01:39 UTC",
+              "context": "METAR: METAR CYYG 050300Z 09002KT 15SM SCT190 M04/M06 A3049 RM",
+              "date": "2026-04-05 03:36 UTC",
               "source": "AviationWeather.gov METAR",
               "tier": 2,
               "muted": false
@@ -329,7 +328,7 @@
               "label": "Island Road Conditions",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "GPEI Transportation and Infrastructure",
               "tier": 2,
               "muted": false
@@ -364,7 +363,7 @@
               "unit": "CAD per USD",
               "status": "ok",
               "context": "BoC as of 2026-04-02",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Bank of Canada Valet API",
               "tier": 1,
               "muted": false
@@ -431,7 +430,7 @@
               "unit": "active alerts",
               "status": "ok",
               "context": "ECCC public alerting — Alert Ready",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Environment and Climate Change Canada",
               "tier": 1,
               "muted": false
@@ -440,7 +439,7 @@
               "label": "PEI EMO Status",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "PEI Emergency Measures Organization",
               "tier": 1,
               "muted": false
@@ -452,11 +451,11 @@
           "indicators": [
             {
               "label": "Charlottetown Harbour Level",
-              "value": "1.064",
+              "value": "1.959",
               "unit": "m (chart datum)",
               "status": "ok",
-              "context": "Predicted: 1.271m  |  Anomaly: -0.207m",
-              "date": "2026-04-05 01:39 UTC",
+              "context": "Predicted: 2.146m  |  Anomaly: -0.187m",
+              "date": "2026-04-05 03:36 UTC",
               "source": "CHS IWLS API (DFO) — station 01700",
               "tier": 2,
               "muted": false
@@ -485,11 +484,11 @@
           "indicators": [
             {
               "label": "Storm Surge (Charlottetown)",
-              "value": "-0.207",
+              "value": "-0.187",
               "unit": "m above predicted tide",
               "status": "ok",
               "context": "Positive = water above predicted tide level",
-              "date": "2026-04-05 01:39 UTC",
+              "date": "2026-04-05 03:36 UTC",
               "source": "CHS IWLS API (DFO)",
               "tier": 3,
               "muted": false
@@ -515,22 +514,22 @@
           "indicators": [
             {
               "label": "Temperature (Charlottetown)",
-              "value": "-5.6",
+              "value": "-5.3",
               "unit": "°C",
               "status": "ok",
-              "context": "Overcast  ·  Wind 8 km/h  ·  Humidity 77%",
-              "date": "2026-04-05 01:39 UTC",
+              "context": "Partly cloudy  ·  Wind 4 km/h  ·  Humidity 73%",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Open-Meteo (Charlottetown)",
               "tier": 1,
               "muted": false
             },
             {
               "label": "Wind Gusts (Charlottetown)",
-              "value": "14",
+              "value": "7",
               "unit": "km/h",
               "status": "ok",
-              "context": "Sustained: 8 km/h",
-              "date": "2026-04-05 01:39 UTC",
+              "context": "Sustained: 4 km/h",
+              "date": "2026-04-05 03:36 UTC",
               "source": "Open-Meteo (Charlottetown)",
               "tier": 1,
               "muted": false
