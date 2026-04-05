@@ -561,113 +561,88 @@ def fetch_statcan_gasoline_charlottetown():
 
 def fetch_gpei_energy():
     """
-    POST to GPEI workflow API — Maritime Electric 15-min feed.
-    POST https://wdf.princeedwardisland.ca/prod/workflow
-    Body: {"featureName": "WindEnergy"}
+    Maritime Electric 15-min generation data via Rukavina proxy.
 
-    Response structure (per Rukavina 2018 docs — still current):
-      {"components": [
-        {"type": 7, "data": {
-            "actualValue": 186,
-            "header": "Total On-Island Load: 186.59 MW",
-            "maxValue": 300, ...}},
-        {"type": 5, "data": {"text": "Last updated October 31, 2018 10:44 AM"}}
-      ]}
+    The GPEI workflow API (wdf.princeedwardisland.ca) is blocked by Radware
+    for all non-browser IPs. Confirmed blocked April 2026 via Thonny testing.
 
-    The MW value lives in the "header" string — parse it from there.
-    Falls back to Rukavina's proxy at energy.reinvented.net if GPEI fails.
+    Using the richer 'deliver' endpoint which includes:
+      - current + previous 15-min readings (for trend direction)
+      - imported MW directly calculated (no derivation needed)
+      - daily peaks for load, wind, solar, fossil, imported
+
+    Primary:  deliver-govpeca-data.php  (richer — current + previous + peaks)
+    Fallback: get-govpeca-json.php      (simpler flat JSON)
     """
-    import re as _re
-
-    def parse_mw(header_str):
-        """Extract float MW value from a header string like 'Total On-Island Load: 186.59 MW'"""
-        m = _re.search(r"([\d.]+)\s*MW", str(header_str))
-        return float(m.group(1)) if m else None
-
-    # ── Primary: GPEI workflow API ───────────────────────────────────────────
-    r = post_json("https://wdf.princeedwardisland.ca/prod/workflow",
-                  {"featureName": "WindEnergy"})
+    # ── Primary: deliver endpoint (richer data) ──────────────────────────────
+    r = get("https://energy.reinvented.net/pei-energy/govpeca/deliver-govpeca-data.php?format=json")
     if r:
         try:
-            data   = r.json()
-            comps  = data.get("components", [])
-            result = {}
-            update_time = None
-
-            for comp in comps:
-                d = comp.get("data", {})
-                if not isinstance(d, dict):
-                    continue
-                header = d.get("header", "")
-                text   = d.get("text", "")
-
-                # Extract timestamp from "Last updated ..." text component
-                if text and ("last updated" in text.lower() or "updated" in text.lower()):
-                    update_time = text.replace("Last updated", "").replace("last updated", "").strip()
-                    continue
-
-                # Parse MW from header string
-                hdr_lower = header.lower()
-                mw = parse_mw(header)
-                if mw is None:
-                    # Also try actualValue field scaled by header context
-                    av = d.get("actualValue")
-                    if av is not None:
-                        # actualValue is rounded integer; use header for precision
-                        mw = float(av)
-
-                if mw is None:
-                    continue
-
-                if   "total on-island load" in hdr_lower:           result["load"]         = mw
-                elif "total on-island wind generation" in hdr_lower: result["wind"]         = mw
-                elif "wind power used on island" in hdr_lower:       result["wind_used"]    = mw
-                elif "wind power exported" in hdr_lower:             result["wind_export"]  = mw
-                elif "fossil fuel generation" in hdr_lower:         result["fossil"]       = mw
-                elif "solar" in hdr_lower and "generation" in hdr_lower: result["solar"]   = mw
-                elif "utility" in hdr_lower and "solar" in hdr_lower:    result["solar"]   = mw
-
-            if result.get("load"):
-                result["update_time"] = update_time or GENERATED
-                result["source"]      = "Maritime Electric via GPEI"
-                print(f"  [GPEI] Load={result.get('load')} Wind={result.get('wind')} "
-                      f"Fossil={result.get('fossil')} Updated={update_time}", file=sys.stderr)
+            d       = r.json()
+            cur     = d.get("current", {})
+            prev    = d.get("previous", {})
+            peaks   = {
+                "load":     d.get("peak",         {}).get("peak"),
+                "wind":     d.get("peakwind",      {}).get("peak"),
+                "imported": d.get("peakimported",  {}).get("peak"),
+                "fossil":   d.get("peakfossil",    {}).get("peak"),
+            }
+            load = float(cur.get("on-island-load", 0))
+            if load > 0:
+                solar  = max(0.0, float(cur.get("on-island-solar",  0)))
+                result = {
+                    "load":        load,
+                    "wind":        float(cur.get("on-island-wind",   0)),
+                    "solar":       solar,
+                    "fossil":      float(cur.get("on-island-fossil", 0)),
+                    "imported":    float(cur.get("imported",         0)),
+                    "wind_used":   float(cur.get("wind-local",       0)),
+                    "wind_export": float(cur.get("wind-export",      0)),
+                    "pct_wind":    float(cur.get("percentage-wind",  0)),
+                    "update_time": cur.get("updatetime", GENERATED),
+                    "source":      "Maritime Electric via reinvented.net",
+                    "peaks":       peaks,
+                }
+                # Trend: compare current load to previous reading
+                if prev:
+                    prev_load = float(prev.get("on-island-load", 0))
+                    if prev_load > 0:
+                        result["load_trend"] = round(load - prev_load, 1)
+                        result["prev_load"]  = prev_load
+                print(f"  [Rukavina] Load={load} Wind={result['wind']} "
+                      f"Solar={solar} Fossil={result['fossil']} "
+                      f"Imported={result['imported']} "
+                      f"Updated={result['update_time']}", file=sys.stderr)
                 return result
         except Exception as e:
-            print(f"  [WARN] GPEI parse — {e}", file=sys.stderr)
+            print(f"  [WARN] Rukavina deliver endpoint — {e}", file=sys.stderr)
 
-    # ── Fallback: Rukavina proxy (energy.reinvented.net) ────────────────────
-    # Self-hosted by Peter Rukavina, updated every 15 min from the same GPEI source.
-    # Clean JSON — no parsing needed.
-    print("  [GPEI] Primary failed — trying Rukavina proxy", file=sys.stderr)
+    # ── Fallback: simple JSON endpoint ───────────────────────────────────────
     r2 = get("https://energy.reinvented.net/pei-energy/govpeca/get-govpeca-json.php?format=json")
     if r2:
         try:
-            d = r2.json()
+            d      = r2.json()
             load   = float(d.get("on-island-load",   0))
-            wind   = float(d.get("on-island-wind",   0))
-            fossil = float(d.get("on-island-fossil", 0))
-            # Proxy doesn't include solar — set to 0
-            result = {
-                "load":        load,
-                "wind":        wind,
-                "solar":       0.0,
-                "fossil":      fossil,
-                "wind_used":   float(d.get("wind-local",   0)),
-                "wind_export": float(d.get("wind-export",  0)),
-                "update_time": d.get("updatetime_human", GENERATED),
-                "source":      "Maritime Electric via reinvented.net proxy",
-            }
-            if result["load"] > 0:
-                print(f"  [Rukavina proxy] Load={load} Wind={wind} Fossil={fossil}",
-                      file=sys.stderr)
+            if load > 0:
+                result = {
+                    "load":        load,
+                    "wind":        float(d.get("on-island-wind",   0)),
+                    "solar":       max(0.0, float(d.get("on-island-solar", 0))),
+                    "fossil":      float(d.get("on-island-fossil", 0)),
+                    "wind_used":   float(d.get("renewable-local",  0)),
+                    "wind_export": float(d.get("renewable-export", 0)),
+                    "pct_wind":    float(d.get("percentage-wind",  0)),
+                    "update_time": d.get("updatetime_human", GENERATED),
+                    "source":      "Maritime Electric via reinvented.net",
+                }
+                # Derive imported from load - local generation
+                result["imported"] = max(0.0, round(
+                    load - result["wind"] - result["solar"] - result["fossil"], 1))
                 return result
         except Exception as e:
-            print(f"  [WARN] Rukavina proxy parse — {e}", file=sys.stderr)
+            print(f"  [WARN] Rukavina fallback — {e}", file=sys.stderr)
 
-    print("  [WARN] Both GPEI sources failed", file=sys.stderr)
     return None
-
 
 def fetch_maritime_electric_grid_status():
     """
@@ -793,29 +768,39 @@ def scrape_energy():
 
     grid = fetch_gpei_energy()
     if grid and "load" in grid:
-        load   = grid.get("load",   0.0)
-        wind   = grid.get("wind",   0.0)
-        solar  = grid.get("solar",  0.0)
-        fossil = grid.get("fossil", 0.0)
-        nb     = max(0.0, load - wind - solar - fossil)
+        load   = grid.get("load",     0.0)
+        wind   = grid.get("wind",     0.0)
+        solar  = grid.get("solar",    0.0)
+        fossil = grid.get("fossil",   0.0)
+        # Use directly-reported imported MW if available, else derive it
+        nb     = grid.get("imported") or max(0.0, load - wind - solar - fossil)
         util   = round((nb / CABLE_CAP_MW) * 100, 1)
         upd    = grid.get("update_time", GENERATED)
+        peaks  = grid.get("peaks", {})
+
+        # Load trend arrow from previous 15-min reading
+        trend      = grid.get("load_trend")
+        trend_str  = f"  ({trend:+.1f} MW vs 15 min ago)" if trend is not None else ""
+        peak_load  = peaks.get("load")
+        peak_str   = f"  ·  Today's peak: {peak_load} MW" if peak_load else ""
 
         t1.append(indicator("Island System Load", f"{load:.1f}", unit="MW",
             status="alert" if load >= 380 else "warn" if load >= 300 else "ok",
             note=(f"Extreme demand — load shedding risk. Record ~{PEAK_RECORD_MW} MW" if load >= 380
                   else "Demand at or above cable import cap — on-island generation required" if load >= 300
                   else ""),
-            context=f"Peak record: ~{PEAK_RECORD_MW} MW (Jan/Feb)",
-            source="Maritime Electric via GPEI", tier=1, date=upd))
+            context=f"Peak record: ~{PEAK_RECORD_MW} MW (Jan/Feb){trend_str}{peak_str}",
+            source="Maritime Electric via reinvented.net", tier=1, date=upd))
 
+        peak_import = peaks.get("imported")
+        peak_imp_str = f"  ·  Today's peak import: {peak_import} MW" if peak_import else ""
         t1.append(indicator("NB Cable Utilization", f"{util}",
             unit=f"% of {CABLE_CAP_MW} MW cap  ({nb:.0f} MW imported)",
             status="alert" if util >= 95 else "warn" if util >= 80 else "ok",
             note=("Cables at capacity — load shedding imminent" if util >= 95
                   else "High cable utilization — grid stress elevated" if util >= 80 else ""),
-            context="4 subsea cables — hard physical limit",
-            source="Maritime Electric via GPEI", tier=1, date=upd,
+            context=f"4 subsea cables — hard physical limit{peak_imp_str}",
+            source="Maritime Electric via reinvented.net", tier=1, date=upd,
             banner=f"NB cable import at {util}% — load shedding risk" if util >= 95 else ""))
 
         wpct = round((wind / load * 100), 1) if load > 0 else 0
@@ -977,6 +962,80 @@ def scrape_water():
 
 # ── SECTOR: HEALTH ────────────────────────────────────────────────────────────
 
+
+def fetch_gpei_er_wait_times(feature_name):
+    """
+    GPEI workflow API — Emergency Department wait times.
+    POST https://wdf.princeedwardisland.ca/prod/workflow
+    Body: {"featureName": "<feature_name>"}
+
+    STATUS (April 2026): wdf.princeedwardisland.ca is blocked by Radware
+    for all non-browser IPs. Returns Radware CAPTCHA HTML (15057 bytes)
+    with HTTP 200. Confirmed blocked from both residential and cloud IPs.
+    Returns None until an alternative data path is found.
+
+    Known feature names:
+      ERWaitTimes_QEH  — Queen Elizabeth Hospital, Charlottetown
+      ERWaitTimes_PCH  — Prince County Hospital, Summerside
+      ERWaitTimes_WH   — Western Hospital
+      ERWaitTimes_KCMH — Kings County Memorial Hospital
+    """
+    import re as _re
+
+    r = post_json(
+        "https://wdf.princeedwardisland.ca/prod/workflow",
+        {"featureName": feature_name}
+    )
+    if not r:
+        return None
+
+    # Fast-fail: Radware returns ~15057-byte CAPTCHA HTML with HTTP 200
+    # Real JSON responses are small and start with '{'
+    if len(r.content) > 5000 or not r.text.strip().startswith("{"):
+        print(f"  [WARN] GPEI ER Radware-blocked ({len(r.content)}b) — {feature_name}",
+              file=sys.stderr)
+        return None
+
+    try:
+        data   = r.json()
+        comps  = data.get("components", [])
+        result = {"raw_headers": [], "feature": feature_name}
+
+        for comp in comps:
+            d = comp.get("data", {})
+            if not isinstance(d, dict):
+                continue
+            header     = d.get("header", "")
+            text       = d.get("text", "")
+            actual_val = d.get("actualValue")
+
+            if text and "updated" in text.lower():
+                result["update_time"] = text.strip()
+                continue
+            if not header:
+                continue
+
+            result["raw_headers"].append(header)
+            hdr = header.lower()
+            m   = _re.search(r"(\d+)", header)
+            num = int(m.group(1)) if m else (int(actual_val) if actual_val is not None else None)
+
+            if any(p in hdr for p in ["wait time", "physician", "time to see"]):
+                result["wait_minutes"] = num
+            elif any(p in hdr for p in ["total patients", "patients in", "number of patients"]):
+                result["total_patients"] = num
+            elif "admitted" in hdr:
+                result["admitted_patients"] = num
+
+        print(f"  [ER API] {feature_name}: {result}", file=sys.stderr)
+        if "wait_minutes" not in result and "total_patients" not in result:
+            return None
+        return result
+
+    except Exception as e:
+        print(f"  [WARN] GPEI ER wait times ({feature_name}) — {e}", file=sys.stderr)
+        return None
+
 def scrape_health():
     t1, t2, t3 = [], [], []
 
@@ -991,10 +1050,81 @@ def scrape_health():
         t1.append(manual("AQHI — Charlottetown", "see weather.gc.ca",
             source="Environment and Climate Change Canada", tier=1))
 
-    t1.append(manual("QEH ED Wait Time", "see healthpei.ca",
-        source="Health PEI — Queen Elizabeth Hospital", tier=1,
-        note="No public real-time ED feed — Health PEI does not publish wait times"))
+    # ── QEH Emergency Department — GPEI workflow API ────────────────────────
+    # Same API as WindEnergy — POST wdf.princeedwardisland.ca/prod/workflow
+    # featureName from page URL: #/service/ERWaitTimes_QEH/ERWaitTimes_QEH
+    qeh = fetch_gpei_er_wait_times("ERWaitTimes_QEH")
+    if qeh and ("wait_minutes" in qeh or "total_patients" in qeh):
+        wait  = qeh.get("wait_minutes")
+        total = qeh.get("total_patients")
+        upd   = qeh.get("update_time", GENERATED)
 
+        # Wait time card
+        if wait is not None:
+            wait_status = ("alert" if wait >= 240 else
+                           "warn"  if wait >= 120 else
+                           "warn"  if wait >= 60  else "ok")
+            wait_note = (
+                "Extreme wait — 4+ hours. Consider alternatives if non-urgent." if wait >= 240 else
+                "Very long wait — over 2 hours to see physician." if wait >= 120 else
+                "Extended wait — over 1 hour to see physician." if wait >= 60 else ""
+            )
+            t1.append(indicator("QEH ED Wait Time", f"{wait}",
+                unit="minutes to see physician",
+                status=wait_status,
+                note=wait_note,
+                context=f"Total patients in ED: {total}" if total else "",
+                source="Health PEI / GPEI workflow API",
+                tier=1, date=upd))
+        else:
+            t1.append(indicator("QEH ED Wait Time", "—",
+                unit="minutes",
+                status="manual",
+                source="Health PEI / GPEI workflow API",
+                tier=1, date=upd))
+
+        # Capacity / patient count card
+        if total is not None:
+            cap_status = ("alert" if total >= 50 else
+                          "warn"  if total >= 35 else "ok")
+            t2.append(indicator("QEH ED Patients", f"{total}",
+                unit="patients currently in ED",
+                status=cap_status,
+                note=("ED at high capacity — extended waits expected" if cap_status == "alert" else
+                      "ED busy — waits above average" if cap_status == "warn" else ""),
+                source="Health PEI / GPEI workflow API",
+                tier=2, date=upd))
+        else:
+            t2.append(manual("QEH Capacity", "see healthpei.ca",
+                source="Health PEI", tier=2))
+    else:
+        # API unavailable — fall back to manual
+        t1.append(manual("QEH ED Wait Time", "see princeedwardisland.ca/QEH-wait",
+            source="Health PEI — GPEI workflow API", tier=1,
+            note="Visit princeedwardisland.ca/en/feature/emergency-department-wait-times-queen-elizabeth-hospital-qeh"))
+        t2.append(manual("QEH Capacity", "see healthpei.ca",
+            source="Health PEI", tier=2))
+
+    # ── Prince County Hospital (Summerside) ──────────────────────────────────
+    pch = fetch_gpei_er_wait_times("ERWaitTimes_PCH")
+    if pch and ("wait_minutes" in pch or "total_patients" in pch):
+        pch_wait  = pch.get("wait_minutes")
+        pch_total = pch.get("total_patients")
+        pch_upd   = pch.get("update_time", GENERATED)
+        pch_status = ("alert" if pch_wait and pch_wait >= 240 else
+                      "warn"  if pch_wait and pch_wait >= 120 else "ok")
+        val_str = f"{pch_wait} min" if pch_wait is not None else f"{pch_total} pts"
+        t2.append(indicator("Prince County Hospital ED", val_str,
+            unit="wait to physician" if pch_wait else "patients in ED",
+            status=pch_status,
+            context=f"Total patients: {pch_total}" if pch_total and pch_wait else "",
+            source="Health PEI / GPEI workflow API",
+            tier=2, date=pch_upd))
+    else:
+        t2.append(manual("Prince County Hospital ED", "see healthpei.ca",
+            source="Health PEI — Summerside", tier=2))
+
+    # ── Respiratory illness surveillance ─────────────────────────────────────
     s = soup("https://www.princeedwardisland.ca/en/information/health-pei/respiratory-illness-surveillance")
     flu_val, flu_status, flu_note = "Normal", "ok", ""
     if s:
@@ -1007,9 +1137,7 @@ def scrape_health():
     t2.append(indicator("Respiratory Illness Activity", flu_val,
         status=flu_status, note=flu_note,
         source="Health PEI", tier=2, date=GENERATED))
-    t2.append(manual("QEH Capacity", "see healthpei.ca", source="Health PEI", tier=2))
-    t2.append(manual("Prince County Hospital", "see healthpei.ca",
-        source="Health PEI — Summerside", tier=2))
+
     t3.append(manual("Patients Without a Doctor", "see Health PEI / CFPC",
         source="Health PEI", tier=3,
         note="PEI has ongoing primary care challenges — lowest physician ratio in Canada"))
