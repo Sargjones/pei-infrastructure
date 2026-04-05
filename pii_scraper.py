@@ -559,37 +559,98 @@ def fetch_statcan_gasoline_charlottetown():
         print(f"  [WARN] StatCan gasoline — {e}", file=sys.stderr)
     return None
 
+def fetch_maritime_electric_energy():
+    """
+    Maritime Electric own API — live generation mix.
+    Discovered April 2026 via JS bundle analysis of grid-status page.
+
+    Endpoint: https://graph.api.maritimeelectric.com/v1/EnergyPurchase/LoadData
+    Auth: Cloudflare allows requests with Origin: graph-ui.api.maritimeelectric.com
+          OR with no User-Agent (server-to-server style).
+    Updates every 15 minutes.
+
+    Fields:
+      load       — total island demand MW (integer)
+      wind       — wind generation MW
+      solar      — solar + battery MW
+      fossil     — combustion turbine MW
+      imported   — NB cable import MW
+      deficit    — generation shortfall MW (0 = no deficit)
+      peakValue  — all-time system peak MW (403 MW, Jan 25 2026)
+      peakTime   — ISO timestamp of all-time peak
+      updateTime — ISO timestamp of this reading
+    """
+    ME_HEADERS = {
+        "Origin":  "https://graph-ui.api.maritimeelectric.com",
+        "Referer": "https://graph-ui.api.maritimeelectric.com/LoadData",
+        "Accept":  "application/json",
+    }
+    try:
+        r = requests.get(
+            "https://graph.api.maritimeelectric.com/v1/EnergyPurchase/LoadData",
+            headers=ME_HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"  [WARN] ME LoadData — {e}", file=sys.stderr)
+        r = None
+    if not r:
+        return None
+    try:
+        d    = r.json()
+        load = float(d.get("load", 0))
+        if load <= 0:
+            return None
+        result = {
+            "load":       load,
+            "wind":       float(d.get("wind",     0)),
+            "solar":      float(d.get("solar",    0)),
+            "fossil":     float(d.get("fossil",   0)),
+            "imported":   float(d.get("imported", 0)),
+            "deficit":    float(d.get("deficit",  0)),
+            "peak_value": float(d.get("peakValue", 0)),
+            "peak_time":  d.get("peakTime", ""),
+            "update_time": d.get("updateTime", GENERATED),
+            "source":     "Maritime Electric API (graph.api.maritimeelectric.com)",
+        }
+        print(f"  [ME API] Load={load} Wind={result['wind']} Solar={result['solar']} "
+              f"Fossil={result['fossil']} Import={result['imported']} "
+              f"Deficit={result['deficit']}", file=sys.stderr)
+        return result
+    except Exception as e:
+        print(f"  [WARN] Maritime Electric energy API — {e}", file=sys.stderr)
+        return None
+
+
 def fetch_gpei_energy():
     """
-    Maritime Electric 15-min generation data via Rukavina proxy.
+    Maritime Electric generation data — Maritime Electric API primary,
+    Rukavina proxy fallback.
 
-    The GPEI workflow API (wdf.princeedwardisland.ca) is blocked by Radware
-    for all non-browser IPs. Confirmed blocked April 2026 via Thonny testing.
-
-    Using the richer 'deliver' endpoint which includes:
-      - current + previous 15-min readings (for trend direction)
-      - imported MW directly calculated (no derivation needed)
-      - daily peaks for load, wind, solar, fossil, imported
-
-    Primary:  deliver-govpeca-data.php  (richer — current + previous + peaks)
-    Fallback: get-govpeca-json.php      (simpler flat JSON)
+    Primary:  graph.api.maritimeelectric.com  (ME's own API, confirmed April 2026)
+    Fallback: energy.reinvented.net           (Rukavina proxy — has wind export split)
     """
-    # ── Primary: deliver endpoint (richer data) ──────────────────────────────
+    # ── Primary: Maritime Electric's own API ─────────────────────────────────
+    result = fetch_maritime_electric_energy()
+    if result:
+        return result
+
+    # ── Fallback: Rukavina deliver endpoint ──────────────────────────────────
+    print("  [Energy] ME API failed — trying Rukavina proxy", file=sys.stderr)
     r = get("https://energy.reinvented.net/pei-energy/govpeca/deliver-govpeca-data.php?format=json")
     if r:
         try:
-            d       = r.json()
-            cur     = d.get("current", {})
-            prev    = d.get("previous", {})
-            peaks   = {
-                "load":     d.get("peak",         {}).get("peak"),
-                "wind":     d.get("peakwind",      {}).get("peak"),
-                "imported": d.get("peakimported",  {}).get("peak"),
-                "fossil":   d.get("peakfossil",    {}).get("peak"),
+            d    = r.json()
+            cur  = d.get("current", {})
+            prev = d.get("previous", {})
+            peaks = {
+                "load":     d.get("peak",        {}).get("peak"),
+                "wind":     d.get("peakwind",     {}).get("peak"),
+                "imported": d.get("peakimported", {}).get("peak"),
+                "fossil":   d.get("peakfossil",   {}).get("peak"),
             }
             load = float(cur.get("on-island-load", 0))
             if load > 0:
-                solar  = max(0.0, float(cur.get("on-island-solar",  0)))
+                solar = max(0.0, float(cur.get("on-island-solar", 0)))
                 result = {
                     "load":        load,
                     "wind":        float(cur.get("on-island-wind",   0)),
@@ -603,161 +664,123 @@ def fetch_gpei_energy():
                     "source":      "Maritime Electric via reinvented.net",
                     "peaks":       peaks,
                 }
-                # Trend: compare current load to previous reading
                 if prev:
                     prev_load = float(prev.get("on-island-load", 0))
                     if prev_load > 0:
                         result["load_trend"] = round(load - prev_load, 1)
-                        result["prev_load"]  = prev_load
-                print(f"  [Rukavina] Load={load} Wind={result['wind']} "
-                      f"Solar={solar} Fossil={result['fossil']} "
-                      f"Imported={result['imported']} "
-                      f"Updated={result['update_time']}", file=sys.stderr)
-                return result
-        except Exception as e:
-            print(f"  [WARN] Rukavina deliver endpoint — {e}", file=sys.stderr)
-
-    # ── Fallback: simple JSON endpoint ───────────────────────────────────────
-    r2 = get("https://energy.reinvented.net/pei-energy/govpeca/get-govpeca-json.php?format=json")
-    if r2:
-        try:
-            d      = r2.json()
-            load   = float(d.get("on-island-load",   0))
-            if load > 0:
-                result = {
-                    "load":        load,
-                    "wind":        float(d.get("on-island-wind",   0)),
-                    "solar":       max(0.0, float(d.get("on-island-solar", 0))),
-                    "fossil":      float(d.get("on-island-fossil", 0)),
-                    "wind_used":   float(d.get("renewable-local",  0)),
-                    "wind_export": float(d.get("renewable-export", 0)),
-                    "pct_wind":    float(d.get("percentage-wind",  0)),
-                    "update_time": d.get("updatetime_human", GENERATED),
-                    "source":      "Maritime Electric via reinvented.net",
-                }
-                # Derive imported from load - local generation
-                result["imported"] = max(0.0, round(
-                    load - result["wind"] - result["solar"] - result["fossil"], 1))
                 return result
         except Exception as e:
             print(f"  [WARN] Rukavina fallback — {e}", file=sys.stderr)
 
+    print("  [WARN] All energy sources failed", file=sys.stderr)
     return None
+
 
 def fetch_maritime_electric_grid_status():
     """
-    Scrape Maritime Electric Grid Status Index page for the current colour level.
-    URL: https://www.maritimeelectric.com/outages/outages/grid-status/
+    Maritime Electric Grid Status Index — from their own API.
+    Discovered April 2026 via JS bundle analysis.
 
-    Four levels (per Maritime Electric / CBC Jan 2026):
-      Green  → Normal       (operating normally)
-      Yellow → Watch        (higher demand forecast within 72h)
-      Orange → Warning      (approaching max capacity within 24h)
-      Red    → Load Shedding (rotating outages active)
+    Endpoint: https://graph.api.maritimeelectric.com/v1/EnergyPurchase/LoadShedding
+    Returns:
+      imageURL            — "../images/LoadShedding/NN.png"
+      timePeriodDescription — active alert text (empty when Normal)
+      updateTime          — ISO timestamp
 
-    IMPORTANT: The page contains permanent FAQ text that describes all four
-    levels at all times. We must strip the FAQ/explanatory section and only
-    scan the live status indicator region at the top of the page.
+    Image numbers (confirmed April 2026 from downloaded PNGs):
+      01 = Normal      (green  — needle pointing left)
+      02 = Watch       (yellow — higher demand forecast within 72h)
+      03 = Warning     (orange — approaching max capacity within 24h)
+      04 = Load Shedding (red  — rotating outages active)
 
-    Strategy: take only the first ~3000 chars of page text (above the FAQ),
-    and look for CSS class signals or active-state phrases there.
-
-    Returns dict: level, label, colour, status — or None on failure.
+    Falls back to page scrape if API unavailable.
     """
+    import re as _re
+
+    ME_HEADERS = {
+        "Origin":  "https://graph-ui.api.maritimeelectric.com",
+        "Referer": "https://graph-ui.api.maritimeelectric.com/LoadShedding",
+        "Accept":  "application/json",
+    }
+    try:
+        r = requests.get(
+            "https://graph.api.maritimeelectric.com/v1/EnergyPurchase/LoadShedding",
+            headers=ME_HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"  [WARN] ME LoadShedding — {e}", file=sys.stderr)
+        r = None
+    if r:
+        try:
+            d         = r.json()
+            image_url = d.get("imageURL", "")
+            desc      = d.get("timePeriodDescription", "").strip()
+            upd       = d.get("updateTime", GENERATED)
+
+            # Extract image number from URL e.g. "../images/LoadShedding/02.png" → "02"
+            m = _re.search(r"(\d+)\.png", image_url)
+            if m:
+                num = int(m.group(1))
+                level_map = {
+                    1: {"level": "normal",       "label": "Normal",
+                        "colour": "green",  "status": "ok"},
+                    2: {"level": "watch",        "label": "Watch",
+                        "colour": "yellow", "status": "warn"},
+                    3: {"level": "warning",      "label": "Warning",
+                        "colour": "orange", "status": "warn"},
+                    4: {"level": "load_shedding","label": "Load Shedding",
+                        "colour": "red",    "status": "alert"},
+                }
+                result = level_map.get(num, level_map[1]).copy()
+                result["description"] = desc
+                result["update_time"] = upd
+                print(f"  [ME GSI] Level={num} ({result['label']}) desc='{desc}'",
+                      file=sys.stderr)
+                return result
+        except Exception as e:
+            print(f"  [WARN] ME grid status API — {e}", file=sys.stderr)
+
+    # ── Fallback: scrape the page directly ───────────────────────────────────
+    print("  [GSI] API failed — falling back to page scrape", file=sys.stderr)
     url = "https://www.maritimeelectric.com/outages/outages/grid-status/"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept":          "text/html,application/xhtml+xml",
         "Accept-Language": "en-CA,en;q=0.9",
-        "Referer": "https://www.maritimeelectric.com/",
+        "Referer":         "https://www.maritimeelectric.com/",
     }
     try:
-        r = requests.get(url, headers=headers, timeout=TIMEOUT)
-        if not r or r.status_code != 200:
+        r2 = requests.get(url, headers=headers, timeout=TIMEOUT)
+        if not r2 or r2.status_code != 200:
             return None
-
-        raw = r.text
-
-        # ── Strip FAQ / explanatory section ──────────────────────────────────
-        # The FAQ starts around "What is load shedding" or "Frequently Asked"
-        # Everything before that is the live status widget area.
-        faq_markers = [
-            "what is load shedding",
-            "frequently asked",
-            "load shedding, or rotating outages, is a last resort",
-            "rotating outages will only be used as a last resort",
-        ]
-        live_section = raw.lower()
-        for marker in faq_markers:
-            idx = live_section.find(marker)
-            if idx > 500:   # only truncate if marker found well into page
-                live_section = live_section[:idx]
+        raw   = r2.text
+        # Strip FAQ section before scanning
+        for marker in ["what is load shedding", "frequently asked",
+                       "load shedding, or rotating outages, is a last resort"]:
+            idx = raw.lower().find(marker)
+            if idx > 500:
+                raw = raw[:idx]
                 break
-
-        # ── CSS class signals (most reliable — JS sets active class) ─────────
-        # Check full raw HTML for class-based signals (these won't appear in FAQ)
         raw_lower = raw.lower()
-
-        if any(p in raw_lower for p in [
-            'class="red active"', 'class="active red"',
-            "status-red active", 'data-level="red"',
-            "grid-status--red active", "indicator--red active",
-        ]):
+        if any(p in raw_lower for p in ['class="red active"', "status-red active",
+                                         'data-level="red"']):
             return {"level": "load_shedding", "label": "Load Shedding",
                     "colour": "red", "status": "alert"}
-
-        if any(p in raw_lower for p in [
-            'class="orange active"', 'class="active orange"',
-            "status-orange active", 'data-level="orange"',
-            "grid-status--orange active", "indicator--orange active",
-        ]):
+        if any(p in raw_lower for p in ['class="orange active"', "status-orange active",
+                                         'data-level="orange"']):
             return {"level": "warning", "label": "Warning",
                     "colour": "orange", "status": "warn"}
-
-        if any(p in raw_lower for p in [
-            'class="yellow active"', 'class="active yellow"',
-            "status-yellow active", 'data-level="yellow"',
-            "grid-status--yellow active", "indicator--yellow active",
-        ]):
+        if any(p in raw_lower for p in ['class="yellow active"', "status-yellow active",
+                                         'data-level="yellow"']):
             return {"level": "watch", "label": "Watch",
                     "colour": "yellow", "status": "warn"}
-
-        # ── Phrase signals in live section only (pre-FAQ text) ───────────────
-        # These phrases only appear above the FAQ when the status is elevated
-        if any(p in live_section for p in [
-            "controlled rotating outages are in effect",
-            "load shedding is currently active",
-            "rotating outages are currently",
-        ]):
-            return {"level": "load_shedding", "label": "Load Shedding",
-                    "colour": "red", "status": "alert"}
-
-        if any(p in live_section for p in [
-            "conservation is required now",
-            "approaching maximum capacity",
-            "outages may begin within",
-        ]):
-            return {"level": "warning", "label": "Warning",
-                    "colour": "orange", "status": "warn"}
-
-        if any(p in live_section for p in [
-            "conservation may be requested",
-            "higher than usual demand is expected",
-            "watch has been issued",
-        ]):
-            return {"level": "watch", "label": "Watch",
-                    "colour": "yellow", "status": "warn"}
-
-        # Successfully fetched and no elevated signals found → Normal
         return {"level": "normal", "label": "Normal",
                 "colour": "green", "status": "ok"}
-
     except Exception as e:
-        print(f"  [WARN] Maritime Electric grid status — {e}", file=sys.stderr)
+        print(f"  [WARN] GSI page scrape fallback — {e}", file=sys.stderr)
         return None
 
 
