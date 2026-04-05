@@ -40,6 +40,27 @@ PEAK_RECORD_MW = 400
 CHARLOTTETOWN_LAT, CHARLOTTETOWN_LON = 46.2382, -63.1311
 BRIDGE_LAT,        BRIDGE_LON        = 46.2500, -63.6800
 
+# ── GPEI ER Wait Times — Radware session cookies ──────────────────────────────
+# Obtained from browser DevTools after passing Radware JS challenge.
+# Refresh: visit QEH wait times page in browser → DevTools → Network →
+#   click ERWaitTimes_QEH → Cookies tab → copy all values into string below.
+# Expiry: ~182 days from capture date.
+# Captured: 2026-04-05 from Sarah's browser session.
+GPEI_ER_COOKIES = (
+    "_gcl_au=1.1.810639456.1775399009; "
+    "_ga=GA1.1.878020187.1775399009; "
+    "__uzma=946ecce4-cfd6-4114-8307-aee1f9336791; "
+    "__uzmb=1775399010; "
+    "__uzme=0151; "
+    "uzmxj=7f9000054d41eb-aadd-4efd-8e5b-99641120bf4f1-17753990076992478439-5f83be724ce8628f19; "
+    "__uzmc=226752533841; "
+    "__uzmd=1775401486; "
+    "__uzmf=7f9000946ecce4-cfd6-4114-8307-aee1f93367911-17753990102442476131-0031e1883db84bc332625; "
+    "uzmx=7f9000054d41eb-aadd-4efd-8e5b-99641120bf4f1-17753990007552479320-7fbfff7d6c0ff13758; "
+    "_ga_7DEKGJT4LV=GS2.1.s1775401485$o2$g1$t1775401486$j59$l0$h211841725; "
+    "_ga_HLNHEB3NTC=GS2.1.s1775401485$o2$g1$t1775401486$j59$l0$h0"
+)
+
 WMO_DESC = {
     0:"Clear", 1:"Mainly clear", 2:"Partly cloudy", 3:"Overcast",
     45:"Fog", 48:"Icy fog",
@@ -986,78 +1007,196 @@ def scrape_water():
 # ── SECTOR: HEALTH ────────────────────────────────────────────────────────────
 
 
-def fetch_gpei_er_wait_times(feature_name):
+def fetch_gpei_er_wait_times(feature_name, cookie_string=None):
     """
-    GPEI workflow API — Emergency Department wait times.
-    POST https://wdf.princeedwardisland.ca/prod/workflow
-    Body: {"featureName": "<feature_name>"}
+    GPEI /api/workflow — Emergency Department wait times.
+    Cracked April 5 2026 via browser DevTools network inspection.
 
-    STATUS (April 2026): wdf.princeedwardisland.ca is blocked by Radware
-    for all non-browser IPs. Returns Radware CAPTCHA HTML (15057 bytes)
-    with HTTP 200. Confirmed blocked from both residential and cloud IPs.
-    Returns None until an alternative data path is found.
+    Endpoint:  POST https://wdf.princeedwardisland.ca/api/workflow
+    Auth:      Radware session cookies (solved by real browser JS challenge)
+               Cookies stored in GPEI_COOKIES constant below.
+               Bound to IP+UA fingerprint — may need refresh periodically.
 
-    Known feature names:
+    Request body (214 bytes — discovered via Payload tab):
+      {
+        "appName":    "<featureName>",
+        "featureName": "<featureName>",
+        "metaVars":   {"service_id": null, "save_location": null},
+        "queryName":  "<featureName>",
+        "queryVars":  {"service": "<featureName>", "activity": "<featureName>"}
+      }
+
+    Response structure:
+      data[0] = TableV2 with rows:
+        "Patients in the Waiting Room" → count, (no wait time — they're waiting)
+          children: triage rows with Div.data.value = triage level name
+            "Most Urgent (Level 2)"        → count, wait text e.g. "2-3 hours"
+            "Urgent (Level 3)"             → count, wait text e.g. "> 10 hours"
+            "Less than Urgent (Level 4&5)" → count, wait text
+        "Patients being treated by a Physician" → count
+        "Total Patients in Emergency Department" → count
+      data[1] = Paragraph: "Last updated April 5, 2026 12:10 PM"
+
+      KCMH when closed returns a single Heading with closure message.
+
+    Feature names:
       ERWaitTimes_QEH  — Queen Elizabeth Hospital, Charlottetown
       ERWaitTimes_PCH  — Prince County Hospital, Summerside
       ERWaitTimes_WH   — Western Hospital
       ERWaitTimes_KCMH — Kings County Memorial Hospital
     """
-    import re as _re
-
-    r = post_json(
-        "https://wdf.princeedwardisland.ca/prod/workflow",
-        {"featureName": feature_name}
-    )
-    if not r:
-        return None
-
-    # Fast-fail: Radware returns ~15057-byte CAPTCHA HTML with HTTP 200
-    # Real JSON responses are small and start with '{'
-    if len(r.content) > 5000 or not r.text.strip().startswith("{"):
-        print(f"  [WARN] GPEI ER Radware-blocked ({len(r.content)}b) — {feature_name}",
+    # ── Radware session cookies ───────────────────────────────────────────────
+    # Obtained from browser DevTools after passing JS challenge.
+    # These are HttpOnly so only visible in DevTools — not readable by JS.
+    # Refresh procedure: visit QEH page in browser, DevTools → Network →
+    #   click ERWaitTimes_QEH → Cookies tab → copy all cookie values.
+    # Expiry: ~182 days (Max-Age=15724800)
+    cookies_str = cookie_string or GPEI_ER_COOKIES
+    if not cookies_str:
+        print(f"  [WARN] No GPEI ER cookies configured — {feature_name} stays manual",
               file=sys.stderr)
         return None
 
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/146.0.0.0 Mobile Safari/537.36"
+        ),
+        "Accept":           "application/json",
+        "Accept-Language":  "en",
+        "Content-Type":     "application/json",
+        "Origin":           "https://www.princeedwardisland.ca",
+        "Referer":          "https://www.princeedwardisland.ca/",
+        "Client-Show-Status": "true",
+        "Sec-Ch-Ua":        '"Chromium";v="146", "Not-A-Brand";v="24", "Google Chrome";v="146"',
+        "Sec-Ch-Ua-Mobile": "?1",
+        "Sec-Ch-Ua-Platform": '"Android"',
+        "Sec-Fetch-Dest":   "empty",
+        "Sec-Fetch-Mode":   "cors",
+        "Sec-Fetch-Site":   "same-site",
+        "Cookie":           cookies_str,
+    }
+    body = {
+        "appName":    feature_name,
+        "featureName": feature_name,
+        "metaVars":   {"service_id": None, "save_location": None},
+        "queryName":  feature_name,
+        "queryVars":  {"service": feature_name, "activity": feature_name},
+    }
+
     try:
-        data   = r.json()
-        comps  = data.get("components", [])
-        result = {"raw_headers": [], "feature": feature_name}
-
-        for comp in comps:
-            d = comp.get("data", {})
-            if not isinstance(d, dict):
-                continue
-            header     = d.get("header", "")
-            text       = d.get("text", "")
-            actual_val = d.get("actualValue")
-
-            if text and "updated" in text.lower():
-                result["update_time"] = text.strip()
-                continue
-            if not header:
-                continue
-
-            result["raw_headers"].append(header)
-            hdr = header.lower()
-            m   = _re.search(r"(\d+)", header)
-            num = int(m.group(1)) if m else (int(actual_val) if actual_val is not None else None)
-
-            if any(p in hdr for p in ["wait time", "physician", "time to see"]):
-                result["wait_minutes"] = num
-            elif any(p in hdr for p in ["total patients", "patients in", "number of patients"]):
-                result["total_patients"] = num
-            elif "admitted" in hdr:
-                result["admitted_patients"] = num
-
-        print(f"  [ER API] {feature_name}: {result}", file=sys.stderr)
-        if "wait_minutes" not in result and "total_patients" not in result:
+        r = requests.post(
+            "https://wdf.princeedwardisland.ca/api/workflow",
+            json=body, headers=headers, timeout=TIMEOUT
+        )
+        if not r.ok:
+            print(f"  [WARN] GPEI ER {feature_name} HTTP {r.status_code}",
+                  file=sys.stderr)
             return None
+        if 'captcha' in r.text.lower():
+            print(f"  [WARN] GPEI ER {feature_name} — Radware blocked (cookies expired?)",
+                  file=sys.stderr)
+            return None
+
+        d    = r.json()
+        data = d.get('data')
+        if not data:
+            return None
+
+        result = {"feature": feature_name, "raw": d}
+
+        # ── KCMH-style: single Heading = closure/special message ─────────────
+        if isinstance(data, dict) and data.get('type') == 'Heading':
+            result['closed']  = True
+            result['message'] = data.get('data', {}).get('text', '').strip()
+            print(f"  [ER] {feature_name}: CLOSED — {result['message'][:60]}",
+                  file=sys.stderr)
+            return result
+
+        # ── Normal: list with TableV2 + Paragraph ────────────────────────────
+        if not isinstance(data, list):
+            return None
+
+        # Extract timestamp from Paragraph element
+        for item in data:
+            if item.get('type') == 'Paragraph':
+                result['updated'] = item.get('data', {}).get('text', '').strip()
+
+        # Parse the TableV2
+        table = next((x for x in data if x.get('type') == 'TableV2'), None)
+        if not table:
+            return None
+
+        rows = [c for c in table.get('children', [])
+                if c.get('type') == 'TableV2Row']
+
+        def cell_text(row, idx):
+            """Get text from the Nth cell in a row."""
+            cells = [c for c in row.get('children', [])
+                     if c.get('type') in ('TableV2Cell', 'TableV2Header')]
+            if idx < len(cells):
+                return (cells[idx].get('data', {}).get('text') or '').strip()
+            return ''
+
+        def row_label(row):
+            """Get row label — from TableV2Header text or Div child value."""
+            for child in row.get('children', []):
+                # Direct header text
+                if child.get('type') == 'TableV2Header':
+                    t = (child.get('data', {}).get('text') or '').strip()
+                    if t:
+                        return t
+                # Div child inside a cell
+                if child.get('type') == 'TableV2Cell':
+                    for gc in child.get('children', []):
+                        if gc.get('type') == 'Div':
+                            v = (gc.get('data', {}).get('value') or '').strip()
+                            if v:
+                                import html as _html
+                                return _html.unescape(v)
+            return ''
+
+        for row in rows:
+            label = row_label(row)
+            if not label:
+                continue
+            count_str = cell_text(row, 1)
+            wait_str  = cell_text(row, 2)
+            try:
+                count = int(count_str) if count_str else None
+            except ValueError:
+                count = None
+
+            label_lower = label.lower()
+            if 'waiting room' in label_lower:
+                result['waiting_room'] = count
+            elif 'most urgent' in label_lower or 'level 2' in label_lower:
+                result['level2_count'] = count
+                result['level2_wait']  = wait_str
+            elif 'urgent' in label_lower and 'level 3' in label_lower:
+                result['level3_count'] = count
+                result['level3_wait']  = wait_str
+            elif 'less than urgent' in label_lower or 'level 4' in label_lower:
+                result['level4_count'] = count
+                result['level4_wait']  = wait_str
+            elif 'physician' in label_lower:
+                result['with_physician'] = count
+            elif 'total' in label_lower:
+                result['total'] = count
+
+        result['closed'] = False
+        print(f"  [ER] {feature_name}: total={result.get('total')} "
+              f"waiting={result.get('waiting_room')} "
+              f"L3_wait={result.get('level3_wait')} "
+              f"updated={result.get('updated', '')[-20:]}",
+              file=sys.stderr)
         return result
 
     except Exception as e:
-        print(f"  [WARN] GPEI ER wait times ({feature_name}) — {e}", file=sys.stderr)
+        print(f"  [WARN] GPEI ER {feature_name} — {e}", file=sys.stderr)
         return None
+
 
 def scrape_health():
     t1, t2, t3 = [], [], []
@@ -1074,78 +1213,92 @@ def scrape_health():
             source="Environment and Climate Change Canada", tier=1))
 
     # ── QEH Emergency Department — GPEI workflow API ────────────────────────
-    # Same API as WindEnergy — POST wdf.princeedwardisland.ca/prod/workflow
-    # featureName from page URL: #/service/ERWaitTimes_QEH/ERWaitTimes_QEH
+    # ── QEH — Queen Elizabeth Hospital, Charlottetown ───────────────────────
+    # Uses GPEI /api/workflow with Radware session cookies.
+    # Cracked April 5 2026 — see fetch_gpei_er_wait_times() for full details.
+    def _er_indicator(name, hosp_data, tier, is_tier1=False):
+        """Build indicator cards from parsed ER wait time data."""
+        if not hosp_data:
+            return None
+        upd = hosp_data.get("updated", GENERATED)
+
+        if hosp_data.get("closed"):
+            msg = hosp_data.get("message", "ED closed")
+            ind = indicator(name, "Closed", status="alert",
+                note=msg[:120] if msg else "ED temporarily closed",
+                source="Health PEI / GPEI", tier=tier, date=upd,
+                banner=f"{name} — {msg[:80]}" if is_tier1 else "")
+            return ind
+
+        total   = hosp_data.get("total")
+        waiting = hosp_data.get("waiting_room")
+        l2c     = hosp_data.get("level2_count")
+        l3c     = hosp_data.get("level3_count")
+        l3w     = hosp_data.get("level3_wait", "")
+        phys    = hosp_data.get("with_physician")
+
+        # Status based on total and worst triage wait
+        status = "ok"
+        if total and total >= 60:       status = "alert"
+        elif total and total >= 40:     status = "warn"
+        if "> 10" in (l3w or ""):       status = max(status, "warn",
+                                            key=["ok","warn","alert"].index)
+
+        ctx_parts = []
+        if waiting is not None: ctx_parts.append(f"Waiting: {waiting}")
+        if l2c:                 ctx_parts.append(f"Level 2: {l2c} ({hosp_data.get('level2_wait','')})")
+        if l3c:                 ctx_parts.append(f"Level 3: {l3c} ({l3w})")
+        if phys is not None:    ctx_parts.append(f"With physician: {phys}")
+
+        note = ""
+        if "> 10" in (l3w or "") and l3c:
+            note = f"Level 3 (Urgent) wait >10 hours — {l3c} patients affected"
+        elif total and total >= 60:
+            note = f"ED at high capacity — {total} total patients"
+
+        return indicator(name, str(total) if total else "—",
+            unit="total patients in ED",
+            status=status,
+            note=note,
+            context=" · ".join(ctx_parts),
+            source="Health PEI (GPEI /api/workflow)",
+            tier=tier, date=upd)
+
     qeh = fetch_gpei_er_wait_times("ERWaitTimes_QEH")
-    if qeh and ("wait_minutes" in qeh or "total_patients" in qeh):
-        wait  = qeh.get("wait_minutes")
-        total = qeh.get("total_patients")
-        upd   = qeh.get("update_time", GENERATED)
-
-        # Wait time card
-        if wait is not None:
-            wait_status = ("alert" if wait >= 240 else
-                           "warn"  if wait >= 120 else
-                           "warn"  if wait >= 60  else "ok")
-            wait_note = (
-                "Extreme wait — 4+ hours. Consider alternatives if non-urgent." if wait >= 240 else
-                "Very long wait — over 2 hours to see physician." if wait >= 120 else
-                "Extended wait — over 1 hour to see physician." if wait >= 60 else ""
-            )
-            t1.append(indicator("QEH ED Wait Time", f"{wait}",
-                unit="minutes to see physician",
-                status=wait_status,
-                note=wait_note,
-                context=f"Total patients in ED: {total}" if total else "",
-                source="Health PEI / GPEI workflow API",
-                tier=1, date=upd))
-        else:
-            t1.append(indicator("QEH ED Wait Time", "—",
-                unit="minutes",
-                status="manual",
-                source="Health PEI / GPEI workflow API",
-                tier=1, date=upd))
-
-        # Capacity / patient count card
-        if total is not None:
-            cap_status = ("alert" if total >= 50 else
-                          "warn"  if total >= 35 else "ok")
-            t2.append(indicator("QEH ED Patients", f"{total}",
-                unit="patients currently in ED",
-                status=cap_status,
-                note=("ED at high capacity — extended waits expected" if cap_status == "alert" else
-                      "ED busy — waits above average" if cap_status == "warn" else ""),
-                source="Health PEI / GPEI workflow API",
-                tier=2, date=upd))
-        else:
-            t2.append(manual("QEH Capacity", "see healthpei.ca",
-                source="Health PEI", tier=2))
+    if qeh:
+        ind = _er_indicator("QEH Emergency Department", qeh, tier=1, is_tier1=True)
+        if ind: t1.append(ind)
     else:
-        # API unavailable — fall back to manual
-        t1.append(manual("QEH ED Wait Time", "see princeedwardisland.ca/QEH-wait",
-            source="Health PEI — GPEI workflow API", tier=1,
-            note="Visit princeedwardisland.ca/en/feature/emergency-department-wait-times-queen-elizabeth-hospital-qeh"))
-        t2.append(manual("QEH Capacity", "see healthpei.ca",
-            source="Health PEI", tier=2))
+        t1.append(manual("QEH ED Wait Time", "see princeedwardisland.ca",
+            source="Health PEI — cookies may need refresh", tier=1,
+            note="princeedwardisland.ca/en/feature/emergency-department-wait-times-queen-elizabeth-hospital-qeh"))
 
-    # ── Prince County Hospital (Summerside) ──────────────────────────────────
+    # ── PCH — Prince County Hospital, Summerside ─────────────────────────────
     pch = fetch_gpei_er_wait_times("ERWaitTimes_PCH")
-    if pch and ("wait_minutes" in pch or "total_patients" in pch):
-        pch_wait  = pch.get("wait_minutes")
-        pch_total = pch.get("total_patients")
-        pch_upd   = pch.get("update_time", GENERATED)
-        pch_status = ("alert" if pch_wait and pch_wait >= 240 else
-                      "warn"  if pch_wait and pch_wait >= 120 else "ok")
-        val_str = f"{pch_wait} min" if pch_wait is not None else f"{pch_total} pts"
-        t2.append(indicator("Prince County Hospital ED", val_str,
-            unit="wait to physician" if pch_wait else "patients in ED",
-            status=pch_status,
-            context=f"Total patients: {pch_total}" if pch_total and pch_wait else "",
-            source="Health PEI / GPEI workflow API",
-            tier=2, date=pch_upd))
+    if pch:
+        ind = _er_indicator("Prince County Hospital ED", pch, tier=2)
+        if ind: t2.append(ind)
     else:
         t2.append(manual("Prince County Hospital ED", "see healthpei.ca",
             source="Health PEI — Summerside", tier=2))
+
+    # ── WH — Western Hospital ────────────────────────────────────────────────
+    wh = fetch_gpei_er_wait_times("ERWaitTimes_WH")
+    if wh:
+        ind = _er_indicator("Western Hospital ED", wh, tier=2)
+        if ind: t2.append(ind)
+    else:
+        t2.append(manual("Western Hospital ED", "see healthpei.ca",
+            source="Health PEI — Western PEI", tier=2))
+
+    # ── KCMH — Kings County Memorial Hospital ────────────────────────────────
+    kcmh = fetch_gpei_er_wait_times("ERWaitTimes_KCMH")
+    if kcmh:
+        ind = _er_indicator("Kings County Memorial Hospital ED", kcmh, tier=2)
+        if ind: t2.append(ind)
+    else:
+        t2.append(manual("Kings County Memorial ED", "see healthpei.ca",
+            source="Health PEI — Montague", tier=2))
 
     # ── Respiratory illness surveillance ─────────────────────────────────────
     s = soup("https://www.princeedwardisland.ca/en/information/health-pei/respiratory-illness-surveillance")
