@@ -1,6 +1,6 @@
 {
-  "generated": "2026-04-05 00:18 UTC",
-  "timestamp": "2026-04-05 00:18 UTC",
+  "generated": "2026-04-05 00:24 UTC",
+  "timestamp": "2026-04-05 00:24 UTC",
   "source": "PEI Infrastructure Intelligence v2",
   "sectors": {
     "energy": {
@@ -48,7 +48,7 @@
               "label": "Outage Customers",
               "value": "check map",
               "status": "manual",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "poweroutage.com / Maritime Electric",
               "tier": 1,
               "muted": false
@@ -105,7 +105,7 @@
               "unit": "active",
               "status": "ok",
               "context": "100% groundwater province — unique in Canada",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "GPEI Environment, Energy and Climate Action",
               "tier": 1,
               "muted": false
@@ -182,7 +182,7 @@
               "label": "Respiratory Illness Activity",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Health PEI",
               "tier": 2,
               "muted": false
@@ -232,7 +232,7 @@
               "value": "Open",
               "status": "ok",
               "context": "12.9 km fixed link — primary supply corridor",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "confederationbridge.com",
               "tier": 1,
               "muted": false
@@ -248,7 +248,7 @@
               "unit": "km/h",
               "status": "ok",
               "context": "Sustained: 6 km/h",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Open-Meteo (Borden-Carleton)",
               "tier": 2,
               "muted": false
@@ -259,7 +259,7 @@
               "unit": "Wood Islands ↔ Pictou",
               "status": "manual",
               "context": "Seasonal alternate crossing (May–Dec) · 75 min",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "ferries.ca",
               "tier": 2,
               "muted": false
@@ -269,7 +269,7 @@
               "value": "VFR",
               "status": "ok",
               "context": "METAR: METAR CYYG 050000Z 03002KT 15SM SCT200 M03/M05 A3051 RM",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "AviationWeather.gov METAR",
               "tier": 2,
               "muted": false
@@ -278,7 +278,7 @@
               "label": "Island Road Conditions",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "GPEI Transportation and Infrastructure",
               "tier": 2,
               "muted": false
@@ -313,7 +313,7 @@
               "unit": "CAD per USD",
               "status": "ok",
               "context": "BoC as of 2026-04-02",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Bank of Canada Valet API",
               "tier": 1,
               "muted": false
@@ -380,7 +380,7 @@
               "unit": "active alerts",
               "status": "ok",
               "context": "ECCC public alerting — Alert Ready",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Environment and Climate Change Canada",
               "tier": 1,
               "muted": false
@@ -389,7 +389,7 @@
               "label": "PEI EMO Status",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "PEI Emergency Measures Organization",
               "tier": 1,
               "muted": false
@@ -405,7 +405,7 @@
               "unit": "m (chart datum)",
               "status": "ok",
               "context": "Predicted: 0.829m  |  Anomaly: -0.239m",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "CHS IWLS API (DFO) — station 01700",
               "tier": 2,
               "muted": false
@@ -438,7 +438,7 @@
               "unit": "m above predicted tide",
               "status": "ok",
               "context": "Positive = water above predicted tide level",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "CHS IWLS API (DFO)",
               "tier": 3,
               "muted": false
@@ -468,7 +468,7 @@
               "unit": "°C",
               "status": "ok",
               "context": "Overcast  ·  Wind 4 km/h  ·  Humidity 89%",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Open-Meteo (Charlottetown)",
               "tier": 1,
               "muted": false
@@ -479,7 +479,7 @@
               "unit": "km/h",
               "status": "ok",
               "context": "Sustained: 4 km/h",
-              "date": "2026-04-05 00:18 UTC",
+              "date": "2026-04-05 00:24 UTC",
               "source": "Open-Meteo (Charlottetown)",
               "tier": 1,
               "muted": false
