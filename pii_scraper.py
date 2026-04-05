@@ -1,19 +1,14 @@
 """
-PEI Infrastructure Intelligence — Scraper  v2
+PEI Infrastructure Intelligence — Scraper  v3
 ==============================================
 Mirrors TII data structure:
   { sectors: { <sector>: { tiers: { tier1: { indicators:[...] } } } } }
 
-New in v2:
-  - GPEI/Maritime Electric live MW feed (energy generation mix)
-  - Open-Meteo for Charlottetown weather + bridge-area wind gusts (no API key)
-  - Bank of Canada Valet API for CAD/USD
-  - AviationWeather.gov METAR for Charlottetown Airport (CYYG)
-  - Statistics Canada Valet API for PEI CPI
-  - CMHC API for Charlottetown housing vacancy
-  - Fixed Grid Status false-positive (keyword to live status extraction)
-  - Environment Canada AQHI XML feed
-  - ECCC weather alerts RSS for PEI
+New in v3 (on top of v2):
+  - CHS IWLS API — Charlottetown harbour real-time water level + storm surge
+  - CWFIS NRCan — Fire Weather Index (FWI) for PEI, daily CSV
+  - NOAA CoastWatch ERDDAP — Gulf of St. Lawrence SST anomaly
+  - AAFC Canadian Drought Monitor — GeoJSON, PEI polygon classification
 
 Run:   python pii_scraper.py
 Output: pii_data_YYYYMMDD.json  +  pii_data_latest.json
@@ -224,6 +219,223 @@ def fetch_cmhc_vacancy():
     except Exception:
         pass
     return None, None
+
+def fetch_charlottetown_water_level():
+    """
+    CHS IWLS API — Charlottetown harbour real-time water level.
+    Station code: 01700  API: https://api-iwls.dfo-mpo.gc.ca/api/v1
+    Returns dict: water_level (m), predicted (m), anomaly (m), updated — or None.
+    Anomaly > 0.5m = elevated storm surge concern.
+    """
+    import datetime as dt
+    base         = "https://api-iwls.dfo-mpo.gc.ca/api/v1"
+    station_id   = None
+    # Look up station ID
+    try:
+        r = get(f"{base}/stations", params={"code": "01700"})
+        if r:
+            data = r.json()
+            if isinstance(data, list) and data:
+                station_id = data[0].get("id")
+    except Exception as e:
+        print(f"  [WARN] CHS station lookup — {e}", file=sys.stderr)
+    if not station_id:
+        station_id = "5cebf1e03d0f4a073c4bbdbe"   # known Charlottetown ID
+
+    time_end = TODAY.strftime("%Y-%m-%dT%H:00:00Z")
+    time_beg = (TODAY - dt.timedelta(hours=2)).strftime("%Y-%m-%dT%H:00:00Z")
+
+    wlo = wlp = None
+    for code, var in [("wlo", "wlo"), ("wlp", "wlp")]:
+        try:
+            r2 = get(f"{base}/stations/{station_id}/data",
+                     params={"time-series-code": code, "from": time_beg, "to": time_end})
+            if r2:
+                rows = r2.json()
+                if rows and isinstance(rows, list):
+                    val = rows[-1].get("value")
+                    if code == "wlo": wlo = float(val)
+                    else:             wlp = float(val)
+        except Exception as e:
+            print(f"  [WARN] CHS {code} — {e}", file=sys.stderr)
+
+    if wlo is None:
+        return None
+    anomaly = round(wlo - wlp, 3) if wlp is not None else None
+    return {"water_level": round(wlo, 3), "predicted": round(wlp, 3) if wlp else None,
+            "anomaly": anomaly, "updated": GENERATED}
+
+
+def fetch_fwi_pei():
+    """
+    CWFIS NRCan — Fire Weather Index for PEI, daily CSV.
+    URL pattern: https://cwfis.cfs.nrcan.gc.ca/downloads/fwi_obs/YYYYMMDD_fwi.csv
+    PEI province code: PE  |  FWI scale: 0-5 Low, 5-12 Moderate, 12-20 High,
+                                          20-30 Very High, 30+ Extreme
+    """
+    import datetime as dt
+    for offset in [0, 1, 2]:
+        date_str = (TODAY - dt.timedelta(days=offset)).strftime("%Y%m%d")
+        url = f"https://cwfis.cfs.nrcan.gc.ca/downloads/fwi_obs/{date_str}_fwi.csv"
+        r   = get(url)
+        if not r:
+            continue
+        try:
+            lines  = r.text.strip().split("\n")
+            if len(lines) < 2:
+                continue
+            header = [h.strip().strip('"').lower() for h in lines[0].split(",")]
+            cols   = {h: i for i, h in enumerate(header)}
+            prov_i = cols.get("prov", cols.get("province", -1))
+            lat_i  = cols.get("lat",  cols.get("latitude",  -1))
+            lon_i  = cols.get("lon",  cols.get("longitude", -1))
+            fwi_i  = cols.get("fwi",  -1)
+            if fwi_i < 0:
+                continue
+
+            fwi_vals = []
+            for line in lines[1:]:
+                parts = [p.strip().strip('"') for p in line.split(",")]
+                if len(parts) <= fwi_i:
+                    continue
+                # Filter by province or lat/lon bounding box
+                in_pei = False
+                if prov_i >= 0 and prov_i < len(parts):
+                    in_pei = parts[prov_i].upper() in ("PE", "PEI")
+                elif lat_i >= 0 and lon_i >= 0:
+                    try:
+                        lat = float(parts[lat_i]); lon = float(parts[lon_i])
+                        in_pei = (45.9 <= lat <= 47.1 and -64.5 <= lon <= -61.9)
+                    except (ValueError, IndexError):
+                        pass
+                if not in_pei:
+                    continue
+                try:
+                    fwi_vals.append(float(parts[fwi_i]))
+                except ValueError:
+                    pass
+
+            if fwi_vals:
+                return {"fwi":      round(sum(fwi_vals)/len(fwi_vals), 1),
+                        "fwi_max":  round(max(fwi_vals), 1),
+                        "stations": len(fwi_vals),
+                        "date":     date_str,
+                        "season":   TODAY.month in range(4, 11)}
+        except Exception as e:
+            print(f"  [WARN] CWFIS FWI ({date_str}) — {e}", file=sys.stderr)
+    return None
+
+
+def fetch_gulf_sst_anomaly():
+    """
+    NOAA CoastWatch ERDDAP — Gulf of St. Lawrence / Northumberland Strait SST anomaly.
+    Dataset: noaacrwsstanomalyDaily (NOAA Coral Reef Watch, 5km daily)
+    Point: ~46.5°N, 63.5°W (central Northumberland Strait)
+    Returns dict: anomaly (°C), date — or None.
+    Positive = warmer than average = amplified storm/erosion risk for PEI.
+    """
+    import datetime as dt
+    yesterday    = (TODAY - dt.timedelta(days=1)).strftime("%Y-%m-%dT12:00:00Z")
+    two_days_ago = (TODAY - dt.timedelta(days=2)).strftime("%Y-%m-%dT12:00:00Z")
+    lat, lon     = 46.5, -63.5
+    url = (
+        "https://coastwatch.pfeg.noaa.gov/erddap/griddap/"
+        "noaacrwsstanomalyDaily.csv"
+        f"?sea_surface_temperature_anomaly"
+        f"[({two_days_ago}):1:({yesterday})]"
+        f"[({lat-0.05:.2f}):1:({lat+0.05:.2f})]"
+        f"[({lon-0.05:.2f}):1:({lon+0.05:.2f})]"
+    )
+    r = get(url)
+    if not r:
+        return None
+    try:
+        lines = [l.strip() for l in r.text.strip().split("\n") if l.strip()]
+        if len(lines) < 3:
+            return None
+        # ERDDAP CSV: row 0=col names, row 1=units, row 2+=data
+        data_lines = [l for l in lines[2:] if l]
+        if not data_lines:
+            return None
+        parts   = data_lines[-1].split(",")
+        anomaly = float(parts[-1].strip())
+        date_str = parts[0].strip()[:10]
+        return {"anomaly": round(anomaly, 2), "date": date_str}
+    except Exception as e:
+        print(f"  [WARN] NOAA SST anomaly — {e}", file=sys.stderr)
+        return None
+
+
+def fetch_aafc_drought_pei():
+    """
+    AAFC Canadian Drought Monitor — monthly GeoJSON for PEI.
+    Drought categories: D0=Abnormally Dry, D1=Moderate, D2=Severe,
+                        D3=Extreme, D4=Exceptional, None=No drought
+    Returns dict: category, label, date — or None.
+    """
+    import datetime as dt
+    # Try current month and previous month
+    for offset in [0, 1, 2]:
+        d    = (TODAY.replace(day=1) - dt.timedelta(days=offset * 28))
+        yr   = d.strftime("%Y")
+        mo   = d.strftime("%m")
+        url  = (
+            f"https://agriculture.canada.ca/atlas/data_donnees/"
+            f"canadianDroughtMonitor/data_donnees/geoJSON/"
+            f"CDM_{yr}_{mo}_bilingual.geojson"
+        )
+        r = get(url)
+        if not r:
+            continue
+        try:
+            gj       = r.json()
+            features = gj.get("features", [])
+            PEI_LAT  = (45.9, 47.1)
+            PEI_LON  = (-64.5, -61.9)
+            cats     = []
+
+            def in_pei_bbox(coords):
+                """Recursively check if any coord is within PEI bounding box."""
+                if not coords:
+                    return False
+                if isinstance(coords[0], (int, float)):
+                    return (PEI_LAT[0] <= coords[1] <= PEI_LAT[1] and
+                            PEI_LON[0] <= coords[0] <= PEI_LON[1])
+                return any(in_pei_bbox(c) for c in coords)
+
+            for feat in features:
+                props = feat.get("properties", {})
+                # Province check
+                prov = " ".join(str(v) for v in props.values()).upper()
+                geom = feat.get("geometry", {})
+                if "EDWARD" not in prov and "PEI" not in prov:
+                    if not in_pei_bbox(geom.get("coordinates", [])):
+                        continue
+                # Extract category
+                for key in ["DCAT_EN","drought_cat","category","CAT","CLASS","DCAT"]:
+                    val = str(props.get(key, "")).strip()
+                    if val:
+                        cats.append(val)
+                        break
+
+            if not cats:
+                continue
+
+            order  = ["D4","D3","D2","D1","D0","None",""]
+            labels = {"D4":"Exceptional Drought","D3":"Extreme Drought",
+                      "D2":"Severe Drought","D1":"Moderate Drought",
+                      "D0":"Abnormally Dry","None":"No Drought","":"No Drought"}
+            worst  = ""
+            for c in order:
+                if any(c in cat for cat in cats):
+                    worst = c; break
+
+            return {"category": worst, "label": labels.get(worst, worst),
+                    "date": f"{yr}-{mo}"}
+        except Exception as e:
+            print(f"  [WARN] AAFC drought GeoJSON ({yr}-{mo}) — {e}", file=sys.stderr)
+    return None
+
 
 def fetch_gpei_energy():
     """POST to GPEI workflow API — Maritime Electric 15-min feed."""
@@ -645,6 +857,51 @@ def scrape_public_safety():
     t1.append(indicator("PEI EMO Status", emo_val, status=emo_status, note=emo_note,
         source="PEI Emergency Measures Organization", tier=1, date=GENERATED))
 
+    # ── Charlottetown Harbour Water Level — CHS IWLS API ────────────────────
+    wl = fetch_charlottetown_water_level()
+    if wl is not None:
+        level   = wl["water_level"]
+        anomaly = wl.get("anomaly")
+        pred    = wl.get("predicted")
+        wl_status = "ok"
+        wl_note   = ""
+        if anomaly is not None:
+            if anomaly >= 1.0:
+                wl_status = "alert"
+                wl_note   = f"Significant storm surge +{anomaly:.2f}m above predicted — coastal flood risk"
+            elif anomaly >= 0.5:
+                wl_status = "warn"
+                wl_note   = f"Elevated water level +{anomaly:.2f}m above predicted — monitor low-lying areas"
+        context_str = (f"Predicted: {pred:.3f}m  |  Anomaly: {anomaly:+.3f}m" if pred and anomaly is not None
+                       else f"Predicted: {pred:.3f}m" if pred else "")
+        t2.append(indicator("Charlottetown Harbour Level", f"{level:.3f}",
+            unit="m (chart datum)",
+            status=wl_status,
+            note=wl_note,
+            context=context_str,
+            source="CHS IWLS API (DFO) — station 01700",
+            tier=2, date=GENERATED))
+        # Storm surge card (Tier 3 contextual unless active)
+        if anomaly is not None:
+            surge_status = "alert" if anomaly >= 1.0 else "warn" if anomaly >= 0.5 else "ok"
+            t3.append(indicator("Storm Surge (Charlottetown)", f"{anomaly:+.3f}",
+                unit="m above predicted tide",
+                status=surge_status,
+                note=wl_note if surge_status != "ok" else "",
+                context="Positive = water above predicted tide level",
+                source="CHS IWLS API (DFO)", tier=3, date=GENERATED))
+        else:
+            t3.append(manual("Storm Surge Risk", "see wateroffice.ec.gc.ca",
+                source="Environment Canada / Water Survey of Canada", tier=3,
+                note="Low-lying coastal areas at risk; Charlottetown harbour tide gauge"))
+    else:
+        t2.append(manual("Charlottetown Harbour Level", "see tides.gc.ca",
+            source="Canadian Hydrographic Service (DFO)", tier=2,
+            note="CHS IWLS API station 01700 — real-time water level"))
+        t3.append(manual("Storm Surge Risk", "see wateroffice.ec.gc.ca",
+            source="Environment Canada / Water Survey of Canada", tier=3,
+            note="Low-lying coastal areas at risk; Charlottetown harbour tide gauge"))
+
     t2.append(manual("Coast Guard (Maritime Region)", "see dfo-mpo.gc.ca",
         source="Canadian Coast Guard — Maritimes Region", tier=2,
         note="PEI surrounded by Northumberland Strait, Gulf of St. Lawrence"))
@@ -653,9 +910,6 @@ def scrape_public_safety():
     t3.append(manual("Coastal Erosion Status", "see GPEI Environment",
         source="GPEI Environment, Energy and Climate Action", tier=3,
         note="PEI: highest coastal erosion rates in Canada (~0.3m/yr avg). Storm surge risk."))
-    t3.append(manual("Storm Surge Risk", "see wateroffice.ec.gc.ca",
-        source="Environment Canada / Water Survey of Canada", tier=3,
-        note="Low-lying coastal areas at risk; Charlottetown harbour tide gauge"))
 
     return {"tiers": {
         "tier1": {"label": "Critical Infrastructure", "indicators": t1},
@@ -709,14 +963,68 @@ def scrape_environment():
         t1.append(manual("Temperature (Charlottetown)", "see weather.gc.ca",
             source="Environment Canada", tier=1))
 
-    t2.append(manual("Gulf SST Anomaly", "see dfo-mpo.gc.ca",
-        source="DFO / Bedford Institute of Oceanography", tier=2,
-        note="Warm Gulf SST amplifies storm systems and coastal erosion"))
-    t2.append(manual("Drought Conditions", "see agr.gc.ca/drought-watch",
-        source="Agriculture and Agri-Food Canada", tier=2,
-        note="Drought affects potato crop yields — PEI's primary commodity"))
-    t3.append(manual("Fire Weather Index (PEI)", "see cwfis.cfs.nrcan.gc.ca",
-        source="Canadian Wildland Fire Information System", tier=3))
+    # ── Gulf SST Anomaly — NOAA CoastWatch ERDDAP ────────────────────────────
+    sst = fetch_gulf_sst_anomaly()
+    if sst is not None:
+        a      = sst["anomaly"]
+        s_stat = "alert" if a >= 2.0 else "warn" if a >= 1.0 else "ok"
+        t2.append(indicator("Gulf SST Anomaly", f"{a:+.2f}",
+            unit=f"deg-C  ({sst['date']})",
+            status=s_stat,
+            note=("Strongly above-average Gulf temps — amplified storm and erosion risk" if a >= 2.0 else
+                  "Above-average Gulf temperatures — elevated storm potential" if a >= 1.0 else
+                  "Below-average Gulf temps — reduced storm intensification risk" if a <= -1.0 else ""),
+            context="Northumberland Strait · +ve = warmer than avg = amplified risk",
+            source="NOAA Coral Reef Watch (CoastWatch ERDDAP)", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Gulf SST Anomaly", "see dfo-mpo.gc.ca",
+            source="NOAA CoastWatch / DFO Bedford Institute", tier=2,
+            note="Warm Gulf SST amplifies storm systems and coastal erosion"))
+
+    # ── Canadian Drought Monitor — AAFC GeoJSON ──────────────────────────────
+    drought = fetch_aafc_drought_pei()
+    if drought:
+        dc     = drought["category"]
+        d_stat = ("alert" if dc in ("D3","D4") else
+                  "warn"  if dc in ("D0","D1","D2") else "ok")
+        t2.append(indicator("Drought Conditions (PEI)", drought["label"],
+            unit=f"CDM · {drought['date']}",
+            status=d_stat,
+            note=("Extreme drought — significant potato and agriculture stress" if dc in ("D3","D4") else
+                  "Moderate to Severe drought — potato yields and groundwater at risk" if dc in ("D1","D2") else
+                  "Abnormally dry — monitor soil moisture and well levels" if dc == "D0" else ""),
+            context="Canadian Drought Monitor (AAFC) — monthly assessment",
+            source="Agriculture and Agri-Food Canada", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Drought Conditions", "see agr.gc.ca/drought-watch",
+            source="Agriculture and Agri-Food Canada", tier=2,
+            note="Drought affects potato crop yields — PEI's primary commodity"))
+
+    # ── Fire Weather Index — CWFIS NRCan ─────────────────────────────────────
+    fwi = fetch_fwi_pei()
+    if fwi and fwi.get("season"):
+        f      = fwi["fwi"]
+        fmax   = fwi["fwi_max"]
+        f_stat = "alert" if f >= 30 else "warn" if f >= 12 else "ok"
+        f_cls  = ("Extreme" if f >= 30 else "Very High" if f >= 20 else
+                  "High" if f >= 12 else "Moderate" if f >= 5 else "Low")
+        t3.append(indicator("Fire Weather Index (PEI)", f"{f:.1f}",
+            unit=f"avg · max {fmax:.1f}  ({fwi['date']})",
+            status=f_stat,
+            note=("Extreme fire danger — open burn ban likely in effect" if f >= 30 else
+                  "Very high fire danger — open burning restricted" if f >= 20 else
+                  "High fire danger — use caution with open flames" if f >= 12 else ""),
+            context=f"Danger class: {f_cls} · {fwi['stations']} PEI stations",
+            source="CWFIS / Natural Resources Canada", tier=3, date=GENERATED))
+    elif fwi and not fwi.get("season"):
+        t3.append(indicator("Fire Weather Index (PEI)", "Off Season",
+            unit="Active: Apr-Oct",
+            status="ok",
+            context="FWI calculated during fire season only",
+            source="CWFIS / Natural Resources Canada", tier=3, date=GENERATED))
+    else:
+        t3.append(manual("Fire Weather Index (PEI)", "see cwfis.cfs.nrcan.gc.ca",
+            source="Canadian Wildland Fire Information System", tier=3))
 
     return {"tiers": {
         "tier1": {"label": "Critical Infrastructure", "indicators": t1},
