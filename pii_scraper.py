@@ -242,6 +242,135 @@ def fetch_cmhc_vacancy():
     return None, None
 
 
+
+def fetch_nitrate_pei():
+    """
+    PEI Drinking Water Quality — Nitrate-N levels across island watersheds.
+    Dataset: OD0039 Drinking Water Quality Summary Results (GPEI EECA)
+    Source:  data.princeedwardisland.ca (ArcGIS Hub, public, no auth)
+
+    Confirmed working April 2026 via Thonny testing.
+    Data updated periodically (sampling rounds several times/year).
+    Most recent data: May 2025.
+
+    URL pattern: hub.arcgis.com/api/download/v1/items/<ID>/csv
+      ?redirect=true&layers=0&where=Variable_Name='Nitrate-N'
+
+    Returns dict:
+      mean_latest  — mean Nitrate-N mg/L across latest sampling round (7-day window)
+      max_latest   — max Nitrate-N mg/L in latest round
+      max_watershed — watershed with highest reading
+      sites_latest — number of sites in latest round
+      pct_above_10 — % of 2022+ samples exceeding 10 mg/L (Health Canada limit)
+      mean_recent  — provincial mean mg/L since 2022
+      updated      — date of most recent sample
+      n_recent     — total samples since 2022
+    Health Canada drinking water guideline: 10 mg/L as N-NO3
+    """
+    import csv as _csv
+    import io as _io
+    from datetime import datetime as _dt, timezone as _tz
+    from collections import defaultdict as _dd
+
+    url = (
+        "https://hub.arcgis.com/api/download/v1/items/"
+        "2fca7eabef7c4e838749c87c04d47464/csv"
+        "?redirect=true&layers=0&where=Variable_Name='Nitrate-N'"
+    )
+
+    def _parse_date(s):
+        if not s:
+            return None
+        s = s.strip().replace('/', '-')
+        if s.endswith('+00'):
+            s = s[:-3] + '+00:00'
+        try:
+            d = _dt.fromisoformat(s)
+        except ValueError:
+            try:
+                d = _dt.strptime(s[:10], '%Y-%m-%d').replace(tzinfo=_tz.utc)
+            except Exception:
+                return None
+        return d.replace(tzinfo=d.tzinfo or _tz.utc)
+
+    # Stream download — connection may drop partway through
+    chunks = []
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=45, stream=True)
+        for chunk in r.iter_content(chunk_size=16384):
+            if chunk:
+                chunks.append(chunk)
+    except Exception as e:
+        print(f"  [WARN] Nitrate stream dropped — using {len(chunks)} chunks: {e}",
+              file=sys.stderr)
+
+    if not chunks:
+        return None
+
+    raw  = b''.join(chunks).decode('utf-8-sig', errors='replace')
+    rows_raw = raw.split('\n')
+    # Drop last line (may be incomplete due to dropped connection)
+    complete = '\n'.join(rows_raw[:-1])
+
+    records = []
+    try:
+        reader = _csv.DictReader(_io.StringIO(complete))
+        for row in reader:
+            try:
+                date  = _parse_date(row.get('Sample_Date', ''))
+                val_s = row.get('Value', '').strip()
+                value = float(val_s) if val_s else None
+                if date and value is not None:
+                    # Cap extreme outliers (likely data entry errors e.g. 194 mg/L in 2023)
+                    if value > 100:
+                        continue
+                    records.append({
+                        'date':      date,
+                        'value':     value,
+                        'watershed': row.get('Watershed', '').strip(),
+                        'year':      date.year,
+                    })
+            except (ValueError, KeyError):
+                pass
+    except Exception as e:
+        print(f"  [WARN] Nitrate CSV parse — {e}", file=sys.stderr)
+        return None
+
+    if not records:
+        return None
+
+    records.sort(key=lambda x: x['date'], reverse=True)
+    latest_date = records[0]['date']
+
+    # Latest sampling round = all samples within 7 days of most recent
+    latest_round = [r for r in records
+                    if (latest_date - r['date']).days <= 7]
+    lr_vals  = [r['value'] for r in latest_round]
+    lr_mean  = round(sum(lr_vals) / len(lr_vals), 2) if lr_vals else None
+    lr_max   = round(max(lr_vals), 2) if lr_vals else None
+    lr_worst = max(latest_round, key=lambda r: r['value'])['watershed'] if latest_round else ""
+
+    # Recent stats (2022+)
+    recent = [r for r in records if r['year'] >= 2022]
+    rv = [r['value'] for r in recent]
+    pct_above = round(sum(1 for v in rv if v >= 10) / len(rv) * 100, 1) if rv else 0
+    mean_recent = round(sum(rv) / len(rv), 2) if rv else None
+
+    print(f"  [Nitrate] Latest round: mean={lr_mean} max={lr_max} "
+          f"sites={len(latest_round)} updated={latest_date.date()} "
+          f"pct_above_10={pct_above}%", file=sys.stderr)
+
+    return {
+        'mean_latest':  lr_mean,
+        'max_latest':   lr_max,
+        'max_watershed': lr_worst,
+        'sites_latest': len(latest_round),
+        'pct_above_10': pct_above,
+        'mean_recent':  mean_recent,
+        'updated':      str(latest_date.date()),
+        'n_recent':     len(recent),
+    }
+
 def fetch_charlottetown_water_level():
     """
     CHS IWLS API — Charlottetown harbour real-time water level.
@@ -991,9 +1120,39 @@ def scrape_water():
     t2.append(manual("Central Water Systems", "see GPEI EECA",
         source="GPEI Environment, Energy and Climate Action", tier=2,
         note="~50% of residents on central water; remainder on private wells"))
-    t3.append(manual("Nitrate Risk (Agricultural)", "ongoing monitoring",
-        source="GPEI Environment, Energy and Climate Action", tier=3,
-        note="Potato agriculture — primary source of nitrate contamination in aquifers"))
+    # ── Nitrate-N — GPEI Drinking Water Quality OD0039 ─────────────────────
+    nitrate = fetch_nitrate_pei()
+    if nitrate and nitrate.get('mean_latest') is not None:
+        m      = nitrate['mean_latest']
+        mx     = nitrate['max_latest']
+        pct    = nitrate['pct_above_10']
+        sites  = nitrate['sites_latest']
+        upd    = nitrate['updated']
+        ws     = nitrate['max_watershed']
+
+        # Status: alert if any recent site >20 mg/L or >5% above limit
+        #         warn  if latest mean >5 or >2% above limit
+        #         ok    otherwise (provincial mean ~3.3 mg/L is well below 10)
+        n_stat = ("alert" if pct > 5  or mx > 20 else
+                  "warn"  if pct > 2  or m  > 5  else "ok")
+        n_note = (f"Elevated nitrate — {pct}% of recent samples exceed 10 mg/L Health Canada limit"
+                  if n_stat == "alert" else
+                  f"Moderate nitrate levels — {pct}% of recent samples above 10 mg/L"
+                  if n_stat == "warn" else "")
+
+        t3.append(indicator("Nitrate-N (Watersheds)", f"{m:.1f}",
+            unit=f"mg/L mean · {sites} sites · {upd}",
+            status=n_stat,
+            note=n_note,
+            context=(f"Latest round max: {mx} mg/L ({ws}) · "
+                     f"Provincial mean: {nitrate['mean_recent']} mg/L · "
+                     f"Health Canada limit: 10 mg/L"),
+            source="GPEI EECA — Drinking Water Quality (OD0039)",
+            tier=3, date=GENERATED))
+    else:
+        t3.append(manual("Nitrate Risk (Agricultural)", "ongoing monitoring",
+            source="GPEI Environment, Energy and Climate Action", tier=3,
+            note="Potato agriculture — primary source of nitrate contamination in aquifers"))
     t3.append(manual("Coastal Water Quality", "see PEI Open Data",
         source="data.princeedwardisland.ca", tier=3))
 
