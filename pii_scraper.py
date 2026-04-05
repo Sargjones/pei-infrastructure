@@ -220,6 +220,7 @@ def fetch_cmhc_vacancy():
         pass
     return None, None
 
+
 def fetch_charlottetown_water_level():
     """
     CHS IWLS API — Charlottetown harbour real-time water level.
@@ -437,6 +438,127 @@ def fetch_aafc_drought_pei():
     return None
 
 
+
+def fetch_nrcan_furnace_oil_charlottetown():
+    """
+    NRCan weekly furnace oil price for Charlottetown.
+    URL: www2.nrcan.gc.ca/eneene/sources/pripri/prices_bycity_e.cfm
+         ?PriceYear=0&ProductID=7&LocationID=66  (66 = Charlottetown)
+    Parses the HTML price table — most recent week.
+    Returns dict: price_cpl (cents/litre), week_ending, change_cpl — or None.
+    """
+    url = (
+        "http://www2.nrcan.gc.ca/eneene/sources/pripri/prices_bycity_e.cfm"
+        "?PriceYear=0&ProductID=7&LocationID=66"
+    )
+    r = get(url)
+    if not r:
+        return None
+    try:
+        s = BeautifulSoup(r.text, "html.parser")
+        # Find the prices table — look for table with "Week Ending" header
+        tables = s.find_all("table")
+        for table in tables:
+            headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+            if not any("week" in h for h in headers):
+                continue
+            rows = table.find_all("tr")
+            data_rows = []
+            for row in rows:
+                cells = [td.get_text(strip=True) for td in row.find_all("td")]
+                if len(cells) >= 2 and cells[0] and cells[1]:
+                    # Look for date pattern YYYY-MM-DD and a numeric price
+                    import re as _re
+                    if _re.match(r"\d{4}-\d{2}-\d{2}", cells[0]):
+                        try:
+                            price = float(cells[1])
+                            data_rows.append((cells[0], price))
+                        except ValueError:
+                            pass
+            if data_rows:
+                # Most recent row is last
+                latest = data_rows[-1]
+                prev   = data_rows[-2] if len(data_rows) >= 2 else None
+                change = round(latest[1] - prev[1], 1) if prev else None
+                return {
+                    "price_cpl":   latest[1],
+                    "week_ending": latest[0],
+                    "change_cpl":  change,
+                }
+    except Exception as e:
+        print(f"  [WARN] NRCan furnace oil — {e}", file=sys.stderr)
+    return None
+
+
+def fetch_statcan_food_cpi_pei():
+    """
+    Statistics Canada table 18-10-0004-01 — PEI Food CPI.
+    Uses the getSeriesDataFromCubePidCoordAndLatestNPeriods JSON endpoint.
+    PEI = province coord 9, Food = product coord 2
+    Coordinate string: "9.2" for PEI Food purchased from stores
+    Returns dict: index, ref_period, yoy_pct — or None.
+    """
+    # Coord 9.2 = PEI, Food purchased from stores
+    # Coord 9.1 = PEI, All-items (for context)
+    results = {}
+    for label, coord in [("food", "9.2"), ("all_items", "9.1")]:
+        url = (
+            "https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
+            "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
+            f"?pid=18100004&coord={coord}&latestN=13"
+        )
+        r = get(url)
+        if not r:
+            continue
+        try:
+            series = r.json().get("object", [])
+            if len(series) < 2:
+                continue
+            # Most recent is last
+            latest = series[-1]
+            year_ago = series[-13] if len(series) >= 13 else series[0]
+            val   = float(latest.get("value", 0))
+            ref   = latest.get("refPer", "")
+            ya    = float(year_ago.get("value", 0))
+            yoy   = round(((val - ya) / ya) * 100, 1) if ya else None
+            results[label] = {"index": val, "ref_period": ref, "yoy_pct": yoy}
+        except Exception as e:
+            print(f"  [WARN] StatCan food CPI ({label}) — {e}", file=sys.stderr)
+    return results if results else None
+
+
+def fetch_statcan_gasoline_charlottetown():
+    """
+    Statistics Canada table 18-10-0001-01 — Monthly average retail gasoline prices.
+    Charlottetown (Summerside) = geo coord for PEI city.
+    Uses the same getSeriesData endpoint.
+    Returns dict: price_cpl, ref_period, change_cpl — or None.
+    Coord for Charlottetown gasoline: table 18-10-0001, coord TBD — fallback to scraping
+    """
+    # StatCan table 18-10-0001-01 Monthly avg retail prices gasoline & fuel oil
+    # Charlottetown regular gasoline
+    url = (
+        "https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
+        "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
+        "?pid=18100001&coord=8.1.1&latestN=2"  # coord 8=PEI city, 1.1=regular gasoline
+    )
+    r = get(url)
+    if not r:
+        return None
+    try:
+        series = r.json().get("object", [])
+        if len(series) < 1:
+            return None
+        latest = series[-1]
+        prev   = series[-2] if len(series) >= 2 else None
+        val    = float(latest.get("value", 0))
+        ref    = latest.get("refPer", "")
+        change = round(val - float(prev.get("value", 0)), 1) if prev else None
+        return {"price_cpl": val, "ref_period": ref, "change_cpl": change}
+    except Exception as e:
+        print(f"  [WARN] StatCan gasoline — {e}", file=sys.stderr)
+    return None
+
 def fetch_gpei_energy():
     """POST to GPEI workflow API — Maritime Electric 15-min feed."""
     r = post_json("https://wdf.princeedwardisland.ca/prod/workflow",
@@ -589,9 +711,23 @@ def scrape_energy():
 
     t2.append(manual("Summerside Utility Status", "see summerside.ca/electric",
         source="City of Summerside Electric Utility", tier=2))
-    t3.append(manual("Heating Oil Price", "check nrcan.gc.ca/energy/prices",
-        source="NRCan / local suppliers", tier=3,
-        note="~35% of PEI households rely on heating oil"))
+    # ── NRCan Furnace Oil Price — Charlottetown ─────────────────────────────
+    furn = fetch_nrcan_furnace_oil_charlottetown()
+    if furn:
+        p      = furn["price_cpl"]
+        chg    = furn["change_cpl"]
+        f_stat = "warn" if p > 175 else "ok"
+        chg_str = f"  ({chg:+.1f} vs prev week)" if chg is not None else ""
+        t3.append(indicator("Heating Oil — Charlottetown", f"{p:.1f}",
+            unit=f"¢/L incl. tax  ·  {furn['week_ending']}{chg_str}",
+            status=f_stat,
+            note="Above 175¢/L — elevated heating cost burden on island households" if f_stat == "warn" else "",
+            context="~35% of PEI households rely on fuel oil for heat",
+            source="Natural Resources Canada — weekly retail prices", tier=3, date=GENERATED))
+    else:
+        t3.append(manual("Heating Oil Price", "check nrcan.gc.ca/energy/prices",
+            source="NRCan / local suppliers", tier=3,
+            note="~35% of PEI households rely on heating oil"))
     t3.append(manual("Net Zero Initiatives", "see netzeronavigatorpei.com",
         source="GPEI Environment, Energy and Climate Action", tier=3))
 
@@ -1037,9 +1173,35 @@ def scrape_environment():
 
 def scrape_food():
     t2, t3 = [], []
-    t2.append(manual("Grocery Price Index (PEI)", "see statcan.gc.ca",
-        source="Statistics Canada", tier=2,
-        note="Island logistics premium: all non-local food crosses the Confederation Bridge"))
+    # ── StatCan Food CPI — PEI ──────────────────────────────────────────────
+    food_cpi = fetch_statcan_food_cpi_pei()
+    if food_cpi and "food" in food_cpi:
+        fd = food_cpi["food"]
+        yoy = fd.get("yoy_pct")
+        f_stat = "alert" if yoy and yoy > 6.0 else "warn" if yoy and yoy > 3.5 else "ok"
+        yoy_str = f"+{yoy}%" if yoy is not None and yoy >= 0 else f"{yoy}%" if yoy is not None else "n/a"
+        t2.append(indicator("Food Prices (PEI)", yoy_str,
+            unit=f"YoY  ·  index: {fd['index']:.1f}  ·  {fd['ref_period']}",
+            status=f_stat,
+            note=("Food inflation well above national target — significant pressure on island households"
+                  if f_stat == "alert" else
+                  "Food inflation above Bank of Canada 2% target" if f_stat == "warn" else ""),
+            context="Island logistics premium: all non-local food crosses the Confederation Bridge",
+            source="Statistics Canada table 18-10-0004", tier=2, date=GENERATED))
+        # Also add gasoline price if available
+        gas = fetch_statcan_gasoline_charlottetown()
+        if gas:
+            g_stat = "warn" if gas["price_cpl"] > 180 else "ok"
+            chg_str = f"  ({gas['change_cpl']:+.1f} vs prev month)" if gas.get("change_cpl") else ""
+            t2.append(indicator("Gasoline — Charlottetown", f"{gas['price_cpl']:.1f}",
+                unit=f"¢/L  ·  {gas['ref_period']}{chg_str}",
+                status=g_stat,
+                note="High gasoline price — elevated cost for island households and supply chains" if g_stat == "warn" else "",
+                source="Statistics Canada table 18-10-0001", tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Grocery Price Index (PEI)", "see statcan.gc.ca",
+            source="Statistics Canada", tier=2,
+            note="Island logistics premium: all non-local food crosses the Confederation Bridge"))
     t2.append(manual("Lobster Landings", "see GPEI Fisheries",
         source="GPEI Fisheries and Communities", tier=2,
         note="Spring: late April–June. Fall: August–October."))
