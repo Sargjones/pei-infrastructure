@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's at Stake — Health | PEI Infrastructure Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&family=DM+Mono:wght@0,400;0,500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef6fb;--surface:#f7fbfe;--border:rgba(30,80,130,0.13);--text1:#0f2335;--text2:#2c5270;--text3:#6a9ab8;--accent:#1558a0;--accent2:#c47c20;--ok:#1a7a52;--warn:#8a5800;--alert:#a02828;--font-head:'Playfair Display',Georgia,serif;--font-body:'Source Sans 3',sans-serif;--font-mono:'DM Mono',monospace;}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1e2e;--surface:#142436;--border:rgba(140,190,230,0.12);--text1:#ddeeff;--text2:#7aaecf;--text3:#3a6888;--accent:#5aaee8;--accent2:#e0a030;}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text1);font-family:var(--font-body);font-size:16px;line-height:1.65;min-height:100vh;}
+.page-wrap{max-width:780px;margin:0 auto;padding:2.5rem 1.5rem 5rem;}
+.back-nav{font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-bottom:2.5rem;letter-spacing:.04em;}
+.back-nav a{color:var(--accent);text-decoration:none;}
+.back-nav a:hover{text-decoration:underline;}
+.hero-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.5rem;}
+.hero-title{font-family:var(--font-head);font-size:clamp(2rem,5vw,3rem);font-weight:700;color:var(--text1);line-height:1.15;margin-bottom:1rem;}
+.hero-subtitle{font-size:1.15rem;color:var(--text2);max-width:600px;margin-bottom:2.5rem;font-weight:300;}
+.hero-rule{border:none;border-top:2px solid var(--accent);opacity:.25;margin-bottom:3rem;}
+.fact-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:3rem;}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;}
+.fact-num{font-family:var(--font-head);font-size:2rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:.25rem;}
+.fact-label{font-size:.8rem;color:var(--text2);line-height:1.4;}
+.section{margin-bottom:2.8rem;}
+.section-title{font-family:var(--font-head);font-size:1.35rem;font-weight:600;color:var(--text1);margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);}
+.section-body{color:var(--text2);font-size:.97rem;line-height:1.7;}
+.section-body p{margin-bottom:.85rem;}
+.section-body p:last-child{margin-bottom:0;}
+.section-body strong{color:var(--text1);font-weight:600;}
+/* Hospital map */
+.hospital-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem;margin:1.25rem 0;}
+.hospital-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:.9rem 1.1rem;}
+.hospital-name{font-family:var(--font-mono);font-size:.8rem;font-weight:500;color:var(--accent);margin-bottom:.25rem;}
+.hospital-short{font-size:.78rem;color:var(--text3);margin-bottom:.4rem;}
+.hospital-detail{font-size:.85rem;color:var(--text2);line-height:1.5;}
+.threshold-table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:1rem;}
+.threshold-table th{font-family:var(--font-mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--border);}
+.threshold-table td{padding:.55rem .75rem;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top;}
+.threshold-table tr:last-child td{border-bottom:none;}
+.pill{display:inline-block;border-radius:4px;padding:.15rem .5rem;font-size:.75rem;font-family:var(--font-mono);font-weight:500;}
+.pill-ok{background:rgba(26,122,82,.12);color:var(--ok);}
+.pill-warn{background:rgba(138,88,0,.12);color:var(--warn);}
+.pill-alert{background:rgba(160,40,40,.12);color:var(--alert);}
+.triage-table{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:1rem;}
+.triage-table th{font-family:var(--font-mono);font-size:.73rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);text-align:left;padding:.4rem .7rem;border-bottom:1px solid var(--border);}
+.triage-table td{padding:.45rem .7rem;border-bottom:1px solid var(--border);color:var(--text2);}
+.triage-table tr:last-child td{border-bottom:none;}
+.l1{color:var(--alert);font-weight:600;}
+.l2{color:#c05000;font-weight:600;}
+.l3{color:var(--warn);font-weight:600;}
+.l4{color:#557000;font-weight:600;}
+.l5{color:var(--ok);font-weight:600;}
+.profile-footer{margin-top:4rem;padding-top:1.5rem;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:.75rem;color:var(--text3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="back-nav">
+    <a href="index.html">← PEI Infrastructure Intelligence</a> &nbsp;/&nbsp; Health
+  </div>
+
+  <div class="hero-label">What's at stake — Health</div>
+  <h1 class="hero-title">Four EDs.<br>One Island.</h1>
+  <p class="hero-subtitle">PEI's emergency health system serves 182,000 people across four hospital emergency departments — with no trauma centre, limited specialist coverage, and 33,000 patients without a family doctor.</p>
+  <hr class="hero-rule">
+
+  <div class="fact-strip">
+    <div class="fact-card">
+      <div class="fact-num">4</div>
+      <div class="fact-label">emergency departments serving the entire province</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">33,000</div>
+      <div class="fact-label">Islanders without a family doctor or nurse practitioner</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">&gt;10 hrs</div>
+      <div class="fact-label">Level 3 (Urgent) wait time at QEH recorded April 5, 2026</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">60</div>
+      <div class="fact-label">total patients in QEH emergency on that same Sunday morning</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The four hospitals</h2>
+    <div class="hospital-grid">
+      <div class="hospital-card">
+        <div class="hospital-name">Queen Elizabeth Hospital</div>
+        <div class="hospital-short">QEH · Charlottetown</div>
+        <div class="hospital-detail">PEI's only acute care referral centre. Largest ED, most specialist coverage. Serves Charlottetown and surrounding Queens County — roughly 50% of the island's population.</div>
+      </div>
+      <div class="hospital-card">
+        <div class="hospital-name">Prince County Hospital</div>
+        <div class="hospital-short">PCH · Summerside</div>
+        <div class="hospital-detail">Second-largest facility. Serves Prince County (western PEI). Full ED, some specialist coverage, surgical services. Roughly 35% of island population catchment.</div>
+      </div>
+      <div class="hospital-card">
+        <div class="hospital-name">Western Hospital</div>
+        <div class="hospital-short">WH · Alberton</div>
+        <div class="hospital-detail">Serves western Prince County. Small ED, limited specialist access. Complex cases transferred to PCH or QEH. Essential for rural western communities.</div>
+      </div>
+      <div class="hospital-card">
+        <div class="hospital-name">Kings County Memorial</div>
+        <div class="hospital-short">KCMH · Montague</div>
+        <div class="hospital-detail">Serves Kings County (eastern PEI). ED closes periodically due to staffing — when closed, nearest alternative is QEH, 50+ km away. Most vulnerable ED on the island.</div>
+      </div>
+    </div>
+    <div class="section-body" style="margin-top:1rem;">
+      <p>PEI has no Level 1 trauma centre. Patients requiring major trauma care, neurosurgery, or cardiac intervention are typically air-transported to Halifax (IWK/QEII) or Moncton. This creates a fundamental constraint: for time-sensitive conditions, geography is destiny.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Reading the ED wait time data</h2>
+    <div class="section-body">
+      <p>Health PEI publishes live emergency department wait times through the GPEI portal. The data is updated regularly and shows patients by triage level — the Canadian Triage and Acuity Scale (CTAS), which classifies every ED patient from Level 1 (immediately life-threatening) through Level 5 (non-urgent).</p>
+      <p>The dashboard displays <strong>total patients in the ED</strong> and the <strong>Level 3 (Urgent) wait time</strong> as the primary signal, because Level 3 represents the largest share of patients in a functioning ED and its wait time is the most sensitive indicator of overall ED pressure.</p>
+    </div>
+    <table class="triage-table">
+      <thead>
+        <tr><th>Level</th><th>Name</th><th>Target response</th><th>Examples</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="l1">L1</td><td>Resuscitation</td><td>Immediate</td><td>Cardiac arrest, major trauma</td></tr>
+        <tr><td class="l2">L2</td><td>Emergent (Most Urgent)</td><td>15 minutes</td><td>Chest pain, stroke symptoms, severe pain</td></tr>
+        <tr><td class="l3">L3</td><td>Urgent</td><td>30 minutes</td><td>Moderate pain, infection, non-severe injury</td></tr>
+        <tr><td class="l4">L4</td><td>Less Urgent</td><td>60 minutes</td><td>Minor injury, earache, minor illness</td></tr>
+        <tr><td class="l5">L5</td><td>Non-Urgent</td><td>120 minutes</td><td>Prescription renewal, minor wound check</td></tr>
+      </tbody>
+    </table>
+    <div class="section-body" style="margin-top:1rem;">
+      <p>When Level 3 wait times exceed 4–6 hours at QEH, it is typically a sign that the ED is experiencing significant crowding — often due to <strong>admitted patients boarding in the ED</strong> (patients who have been admitted to hospital but cannot access an inpatient bed) rather than the volume of walk-in patients per se. This is a system-wide capacity issue, not an ED design issue.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The 33,000 without a doctor</h2>
+    <div class="section-body">
+      <p>PEI's patient registry — maintained by Health PEI — tracks Islanders who do not have an attached family physician or nurse practitioner. As of early 2026, that number stands at approximately <strong>33,000 people</strong>, roughly 18% of the island's population.</p>
+      <p>This figure is directly connected to ED pressure. Patients without primary care access have no option but the emergency department for conditions that would otherwise be managed in a community clinic — infections, chronic disease management, prescription renewals, minor injuries. These patients do not require emergency care by CTAS definition, but they have nowhere else to go.</p>
+      <p>Health PEI's "medical homes" program and the provincial attachment strategy have reduced the unattached count from a peak above 40,000, but progress has slowed as recruitment competes with national shortages and PEI's cost-of-living increases make the island less attractive to incoming physicians relative to urban centres.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">KCMH — the fragile ED</h2>
+    <div class="section-body">
+      <p>Kings County Memorial Hospital's emergency department operates on a staffing model that is vulnerable to coverage gaps. When physician or nursing coverage cannot be arranged, the ED closes — sometimes with short notice, sometimes overnight or over a weekend. When this happens, residents of eastern PEI face a drive of 50 kilometres or more to QEH in Charlottetown.</p>
+      <p>The dashboard detects KCMH closures in real time. When the GPEI portal returns a closure notice rather than wait time data, the dashboard displays a red alert. On April 5, 2026 — the day this system was first connected — KCMH was indeed closed, with a message indicating it would reopen Monday at 8 AM. This is not an anomaly; it is an operational reality that the eastern PEI community lives with.</p>
+      <p>For a region with an aging population and significant rates of chronic disease, an ED that closes on weekends is a meaningful safety risk. Calling 911 remains the appropriate response for life-threatening emergencies regardless of local ED status — but for the many conditions that sit between "urgent" and "life-threatening," a closed KCMH forces a difficult calculation.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dashboard thresholds explained</h2>
+    <table class="threshold-table">
+      <thead>
+        <tr><th>Indicator</th><th>Status</th><th>Threshold</th><th>What it means</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>QEH ED — Total patients</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&gt;60 patients</td>
+          <td>High capacity — extended waits expected across all levels</td>
+        </tr>
+        <tr>
+          <td>QEH ED — Total patients</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>40–60 patients</td>
+          <td>Busy ED — above-average waits likely</td>
+        </tr>
+        <tr>
+          <td>QEH ED — Total patients</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&lt;40 patients</td>
+          <td>Normal operating conditions</td>
+        </tr>
+        <tr>
+          <td>QEH Level 3 wait time</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&gt;10 hours</td>
+          <td>Severe crowding — systemic bed access issue likely</td>
+        </tr>
+        <tr>
+          <td>QEH Level 3 wait time</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>4–10 hours</td>
+          <td>Extended wait — consider urgent care alternatives for non-emergency</td>
+        </tr>
+        <tr>
+          <td>KCMH ED status</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>Closed</td>
+          <td>Eastern PEI has no local emergency department — nearest is QEH (50+ km)</td>
+        </tr>
+        <tr>
+          <td>PCH / WH ED</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>&gt;40 patients or Level 3 &gt;4 hrs</td>
+          <td>Above normal pressure for regional facility</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="profile-footer">
+    <span>PEI Infrastructure Intelligence · Health Sector</span>
+    <span>Sources: Health PEI / GPEI /api/workflow · ECCC AQHI</span>
+  </div>
+
+</div>
+</body>
+</html>
