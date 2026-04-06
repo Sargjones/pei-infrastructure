@@ -954,11 +954,12 @@ a:hover { text-decoration: underline; }
 const DATA_URL  = window._PII_DATA_URL;
 const BRIEF_URL = window._PII_BRIEF_URL;
 
-const SECTOR_ORDER  = ["energy","water","health","transport_logistics","financial","public_safety","environment","food"];
+const SECTOR_ORDER  = ["energy","water","health","housing","transport_logistics","financial","public_safety","environment","food"];
 const SECTOR_LABELS = {
   energy:             "Energy",
   water:              "Water",
   health:             "Health",
+  housing:            "Housing",
   transport_logistics:"Transport & Logistics",
   financial:          "Financial",
   public_safety:      "Public Safety",
@@ -975,6 +976,7 @@ const SECTOR_ICONS = {
   financial:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2v1m0 10v1M5 8H2m12 0h-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/></svg>`,
   public_safety:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 2L3 4.5V9c0 3 2.5 5 5 6 2.5-1 5-3 5-6V4.5L8 2z" stroke="currentColor" stroke-width="1.2"/></svg>`,
   environment:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M8 14V8m0 0C8 5 4 3 2 4c2 0 4 2 6 4zm0 0c0-3 4-5 6-4-2 0-4 2-6 4z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+  housing:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M2 8L8 3l6 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 8v5h3v-3h2v3h3V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   food:`<svg class="sector-icon" viewBox="0 0 16 16" fill="none"><path d="M6 2v4a2 2 0 004 0V2m-2 6v6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`
 };
 
@@ -1339,8 +1341,19 @@ function renderDashboard(data) {
     const label = SECTOR_LABELS[sectorKey] || sectorKey;
     const icon  = SECTOR_ICONS[sectorKey] || "";
 
+    const stakePages = {
+      energy:   "energy-profile.html",
+      water:    "water-profile.html",
+      health:   "health-profile.html",
+      housing:  "housing-profile.html",
+    };
+    const stakePage = stakePages[sectorKey];
+    const stakeLink = stakePage
+      ? ` <a href="${stakePage}" target="_blank" rel="noopener" style="font-size:10px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--accent);margin-left:8px;opacity:.75;font-family:var(--font-body)">What's at stake →</a>`
+      : "";
+
     let html = `<div class="sector">
-      <div class="sector-header">${icon}${escHtml(label)}</div>`;
+      <div class="sector-header">${icon}${escHtml(label)}${stakeLink}</div>`;
 
     const tiers = sector.tiers || {};
     const tierKeys = Object.keys(tiers).sort();
