@@ -198,28 +198,42 @@ def fetch_metar(icao="CYYG"):
         return None
 
 def fetch_statcan_cpi_pei():
-    """PEI All-items CPI — StatCan getSeriesDataFromCubePidCoordAndLatestNPeriods"""
-    url = ("https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
-           "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
-           "?pid=18100004&coord=1.9&latestN=2")
-    r = get(url)
-    if not r:
-        return None, None, None
+    """
+    PEI All-items CPI — StatCan table 18-10-0004-01, CSV zip.
+    Confirmed working April 2026 (CSV zip pattern).
+    PEI = GEO 'Prince Edward Island', Products = 'All-items'
+    Returns (index_value, ref_period, yoy_pct) or (None, None, None).
+    """
+    import zipfile as _zf, io as _io, csv as _csv
     try:
-        series = r.json().get("object", [])
-        if len(series) < 1:
+        r = requests.get(
+            "https://www150.statcan.gc.ca/n1/tbl/csv/18100004-eng.zip",
+            headers=HEADERS, timeout=30
+        )
+        if not r or not r.ok:
             return None, None, None
-        latest   = series[-1]
-        prev     = series[-2] if len(series) >= 2 else None
-        val      = float(latest.get("value", 0))
-        ref      = latest.get("refPer", "")
-        yoy      = None
-        if prev:
-            pv = float(prev.get("value", 0))
-            if pv:
-                yoy = round(((val - pv) / pv) * 100, 1)
+        with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+            with z.open(z.namelist()[0]) as f:
+                reader = _csv.DictReader(_io.TextIOWrapper(f, encoding='utf-8-sig'))
+                rows = [row for row in reader
+                        if 'Prince Edward Island' in row.get('GEO', '')
+                        and 'All-items' in row.get('Products and product groups', '')]
+        if not rows:
+            return None, None, None
+        rows.sort(key=lambda r: r.get('REF_DATE', ''))
+        latest = rows[-1]
+        year_ago = next((r for r in reversed(rows[:-1])
+                         if r.get('REF_DATE','')[:4] == str(int(latest.get('REF_DATE','2000')[:4])-1)
+                         and r.get('REF_DATE','')[5:] == latest.get('REF_DATE','')[5:]), None)
+        val = float(latest['VALUE']) if latest.get('VALUE') else None
+        ref = latest.get('REF_DATE', '')
+        yoy = None
+        if val and year_ago and year_ago.get('VALUE'):
+            ya = float(year_ago['VALUE'])
+            yoy = round(((val - ya) / ya) * 100, 1) if ya else None
         return val, ref, yoy
-    except Exception:
+    except Exception as e:
+        print(f"  [WARN] StatCan CPI PEI — {e}", file=sys.stderr)
         return None, None, None
 
 # fetch_cmhc_vacancy replaced by fetch_pei_vacancy() in scrape_housing()
@@ -352,6 +366,132 @@ def fetch_nitrate_pei():
         'mean_recent':  mean_recent,
         'updated':      str(latest_date.date()),
         'n_recent':     len(recent),
+    }
+
+
+def fetch_groundwater_level_pei():
+    """
+    PEI Groundwater Level Monitoring — aquifer anomaly vs seasonal baseline.
+    Dataset: OD0038 Groundwater Level Monitoring (GPEI EECA)
+    Source:  data.princeedwardisland.ca (ArcGIS Hub, public, no auth)
+
+    Confirmed working April 2026 via Thonny testing.
+    Data updated monthly. Most recent: December 2024.
+    162,841 rows across 17 observation wells (some dating to 1967).
+
+    Level__metres_ = depth to water table in metres.
+    HIGHER value = DEEPER water table = LOWER aquifer level.
+
+    Anomaly = current monthly mean minus historical same-month mean (2000+).
+    Positive anomaly = water table deeper than normal = drought stress.
+    Negative anomaly = water table shallower than normal = good recharge.
+
+    Returns dict:
+      mean_z       — mean z-score across active wells
+                     (negative = above normal = good; positive = below = dry)
+      below_normal — count of wells with z > 0.5
+      above_normal — count of wells with z < -0.5
+      n_wells      — number of active wells analysed
+      period       — "YYYY-MM" of most recent data
+      well_details — list of per-well dicts
+    """
+    import csv as _csv
+    import io as _io
+    import statistics as _stat
+    from collections import defaultdict as _dd
+    from datetime import datetime as _dt
+
+    url = (
+        "https://hub.arcgis.com/api/download/v1/items/"
+        "ed01055e0af94d5580089645446cb437/csv?redirect=true&layers=0"
+    )
+
+    chunks = []
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=60, stream=True)
+        for chunk in r.iter_content(chunk_size=16384):
+            if chunk:
+                chunks.append(chunk)
+    except Exception as e:
+        print(f"  [WARN] Groundwater stream: {e}", file=sys.stderr)
+
+    if not chunks:
+        return None
+
+    raw = b''.join(chunks).decode('utf-8-sig', errors='replace')
+    lines = raw.split('\n')
+    reader = _csv.DictReader(_io.StringIO('\n'.join(lines[:-1])))
+
+    # Parse: group by (location, year, month)
+    by_loc_ym    = _dd(list)   # (loc, yr, mo) → [levels]
+    by_loc_month = _dd(list)   # (loc, mo) → [levels] for 2000+ baseline
+
+    for row in reader:
+        try:
+            date_str = row['Date'].replace('/', '-')[:10]
+            date  = _dt.strptime(date_str, '%Y-%m-%d')
+            level = float(row['Level__metres_'])
+            loc   = row['Location'].strip()
+            by_loc_ym[(loc, date.year, date.month)].append(level)
+            if date.year >= 2000:
+                by_loc_month[(loc, date.month)].append(level)
+        except (ValueError, KeyError):
+            pass
+
+    if not by_loc_ym:
+        return None
+
+    # Most recent year-month
+    latest_year, latest_month = max(
+        (y, m) for (loc, y, m) in by_loc_ym.keys())
+
+    # Anomaly per active well
+    anomalies = []
+    for (loc, y, m), readings in by_loc_ym.items():
+        if y != latest_year or m != latest_month:
+            continue
+        current = _stat.mean(readings)
+
+        # Historical baseline: same month, 2000+, excluding latest year
+        hist = []
+        for (l, hy, hm), hvals in by_loc_ym.items():
+            if l == loc and hm == latest_month and hy != latest_year and hy >= 2000:
+                hist.extend(hvals)
+
+        if len(hist) < 10:
+            continue
+
+        hist_mean  = _stat.mean(hist)
+        hist_stdev = _stat.stdev(hist)
+        anomaly    = current - hist_mean
+        z          = anomaly / hist_stdev if hist_stdev > 0 else 0.0
+
+        anomalies.append({
+            'loc':       loc,
+            'current':   round(current, 3),
+            'hist_mean': round(hist_mean, 3),
+            'anomaly':   round(anomaly, 3),
+            'z':         round(z, 2),
+        })
+
+    if not anomalies:
+        return None
+
+    mean_z       = round(_stat.mean(a['z'] for a in anomalies), 2)
+    below_normal = sum(1 for a in anomalies if a['z'] > 0.5)
+    above_normal = sum(1 for a in anomalies if a['z'] < -0.5)
+
+    print(f"  [GW] period={latest_year}-{latest_month:02d} "
+          f"mean_z={mean_z:+.2f} wells={len(anomalies)} "
+          f"below={below_normal} above={above_normal}", file=sys.stderr)
+
+    return {
+        'mean_z':       mean_z,
+        'below_normal': below_normal,
+        'above_normal': above_normal,
+        'n_wells':      len(anomalies),
+        'period':       f"{latest_year}-{latest_month:02d}",
+        'well_details': sorted(anomalies, key=lambda a: a['z'], reverse=True),
     }
 
 def fetch_charlottetown_water_level():
@@ -626,71 +766,87 @@ def fetch_nrcan_furnace_oil_charlottetown():
 def fetch_statcan_food_cpi_pei():
     """
     Statistics Canada table 18-10-0004-01 — PEI Food CPI.
-    Uses the getSeriesDataFromCubePidCoordAndLatestNPeriods JSON endpoint.
-    PEI = province coord 9, Food = product coord 2
-    Coordinate string: "9.2" for PEI Food purchased from stores
-    Returns dict: index, ref_period, yoy_pct — or None.
+    CSV zip pattern confirmed working April 2026.
+    Returns dict with 'food' and 'all_items' keys, each with index/ref/yoy. Or None.
     """
-    # Coord 9.2 = PEI, Food purchased from stores
-    # Coord 9.1 = PEI, All-items (for context)
-    results = {}
-    for label, coord in [("food", "9.2"), ("all_items", "9.1")]:
-        url = (
-            "https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
-            "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
-            f"?pid=18100004&coord={coord}&latestN=13"
+    import zipfile as _zf, io as _io, csv as _csv
+    try:
+        r = requests.get(
+            "https://www150.statcan.gc.ca/n1/tbl/csv/18100004-eng.zip",
+            headers=HEADERS, timeout=30
         )
-        r = get(url)
-        if not r:
-            continue
-        try:
-            series = r.json().get("object", [])
-            if len(series) < 2:
+        if not r or not r.ok:
+            return None
+        with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+            with z.open(z.namelist()[0]) as f:
+                rows = list(_csv.DictReader(_io.TextIOWrapper(f, encoding='utf-8-sig')))
+
+        results = {}
+        targets = {
+            'food':      'Food purchased from stores',
+            'all_items': 'All-items',
+        }
+        for key, product in targets.items():
+            pei_rows = [row for row in rows
+                        if 'Prince Edward Island' in row.get('GEO', '')
+                        and product in row.get('Products and product groups', '')]
+            if not pei_rows:
                 continue
-            # Most recent is last
-            latest = series[-1]
-            year_ago = series[-13] if len(series) >= 13 else series[0]
-            val   = float(latest.get("value", 0))
-            ref   = latest.get("refPer", "")
-            ya    = float(year_ago.get("value", 0))
-            yoy   = round(((val - ya) / ya) * 100, 1) if ya else None
-            results[label] = {"index": val, "ref_period": ref, "yoy_pct": yoy}
-        except Exception as e:
-            print(f"  [WARN] StatCan food CPI ({label}) — {e}", file=sys.stderr)
-    return results if results else None
+            pei_rows.sort(key=lambda r: r.get('REF_DATE', ''))
+            latest = pei_rows[-1]
+            # Find same month last year
+            ly_month = latest.get('REF_DATE', '')
+            ya_target = f"{int(ly_month[:4])-1}{ly_month[4:]}"
+            year_ago = next((r for r in pei_rows if r.get('REF_DATE','') == ya_target), None)
+            val = float(latest['VALUE']) if latest.get('VALUE') else None
+            ref = latest.get('REF_DATE', '')
+            yoy = None
+            if val and year_ago and year_ago.get('VALUE'):
+                ya = float(year_ago['VALUE'])
+                yoy = round(((val - ya) / ya) * 100, 1) if ya else None
+            results[key] = {'index': val, 'ref_period': ref, 'yoy_pct': yoy}
+        return results if results else None
+    except Exception as e:
+        print(f"  [WARN] StatCan food CPI — {e}", file=sys.stderr)
+        return None
 
 
 def fetch_statcan_gasoline_charlottetown():
     """
-    Statistics Canada table 18-10-0001-01 — Monthly average retail gasoline prices.
-    Charlottetown (Summerside) = geo coord for PEI city.
-    Uses the same getSeriesData endpoint.
+    Statistics Canada table 18-10-0001-01 — Monthly avg retail gasoline prices.
+    Charlottetown / PEI regular unleaded.
+    CSV zip pattern confirmed working April 2026.
     Returns dict: price_cpl, ref_period, change_cpl — or None.
-    Coord for Charlottetown gasoline: table 18-10-0001, coord TBD — fallback to scraping
     """
-    # StatCan table 18-10-0001-01 Monthly avg retail prices gasoline & fuel oil
-    # Charlottetown regular gasoline
-    url = (
-        "https://www150.statcan.gc.ca/t1/tbl1/en/dtbl/"
-        "getSeriesDataFromCubePidCoordAndLatestNPeriods/json"
-        "?pid=18100001&coord=8.1.1&latestN=2"  # coord 8=PEI city, 1.1=regular gasoline
-    )
-    r = get(url)
-    if not r:
-        return None
+    import zipfile as _zf, io as _io, csv as _csv
     try:
-        series = r.json().get("object", [])
-        if len(series) < 1:
+        r = requests.get(
+            "https://www150.statcan.gc.ca/n1/tbl/csv/18100001-eng.zip",
+            headers=HEADERS, timeout=30
+        )
+        if not r or not r.ok:
             return None
-        latest = series[-1]
-        prev   = series[-2] if len(series) >= 2 else None
-        val    = float(latest.get("value", 0))
-        ref    = latest.get("refPer", "")
-        change = round(val - float(prev.get("value", 0)), 1) if prev else None
-        return {"price_cpl": val, "ref_period": ref, "change_cpl": change}
+        with _zf.ZipFile(_io.BytesIO(r.content)) as z:
+            with z.open(z.namelist()[0]) as f:
+                rows = list(_csv.DictReader(_io.TextIOWrapper(f, encoding='utf-8-sig')))
+        # Filter PEI / Charlottetown, regular unleaded
+        pei_rows = [row for row in rows
+                    if ('Charlottetown' in row.get('GEO', '') or
+                        'Prince Edward Island' in row.get('GEO', ''))
+                    and 'Regular' in row.get('Type of fuel', '')
+                    and row.get('VALUE', '')]
+        if not pei_rows:
+            return None
+        pei_rows.sort(key=lambda r: r.get('REF_DATE', ''))
+        latest = pei_rows[-1]
+        prev   = pei_rows[-2] if len(pei_rows) >= 2 else None
+        val    = float(latest['VALUE'])
+        ref    = latest.get('REF_DATE', '')
+        change = round(val - float(prev['VALUE']), 1) if prev and prev.get('VALUE') else None
+        return {'price_cpl': val, 'ref_period': ref, 'change_cpl': change}
     except Exception as e:
         print(f"  [WARN] StatCan gasoline — {e}", file=sys.stderr)
-    return None
+        return None
 
 def fetch_maritime_electric_energy():
     """
@@ -1100,9 +1256,57 @@ def scrape_water():
         context="100% groundwater province — unique in Canada",
         source="GPEI Environment, Energy and Climate Action", tier=1, date=GENERATED))
 
-    t2.append(manual("Central Water Systems", "see GPEI EECA",
-        source="GPEI Environment, Energy and Climate Action", tier=2,
-        note="~50% of residents on central water; remainder on private wells"))
+    # ── Groundwater level anomaly — OD0038 ──────────────────────────────────
+    gw = fetch_groundwater_level_pei()
+    if gw and gw.get('n_wells', 0) >= 3:
+        mz      = gw['mean_z']
+        period  = gw['period']
+        n       = gw['n_wells']
+        below   = gw['below_normal']
+        above   = gw['above_normal']
+
+        # z-score: negative = water table higher than normal = good recharge
+        #          positive = water table lower than normal = drought stress
+        if mz > 1.5:
+            gw_status = "alert"
+            gw_note   = (f"Aquifer significantly below seasonal normal — "
+                         f"{below}/{n} wells showing drought stress")
+        elif mz > 0.5:
+            gw_status = "warn"
+            gw_note   = f"{below}/{n} wells below seasonal normal water table"
+        elif mz < -1.0:
+            gw_status = "ok"
+            gw_note   = f"Strong recharge — aquifer above seasonal normal"
+        else:
+            gw_status = "ok"
+            gw_note   = ""
+
+        # Human-readable direction
+        direction = ("below seasonal normal — drought stress signal"
+                     if mz > 0.5 else
+                     "above seasonal normal — good recharge"
+                     if mz < -0.5 else
+                     "near seasonal normal")
+
+        worst = gw['well_details'][0] if gw['well_details'] else None
+        ctx_parts = [f"{n} observation wells", f"Period: {period}"]
+        if worst and worst['z'] > 0.5:
+            ctx_parts.append(
+                f"Driest: {worst['loc']} ({worst['anomaly']:+.2f}m)")
+        ctx_parts.append("100% groundwater province")
+
+        t2.append(indicator("Aquifer Level — PEI",
+            f"{mz:+.2f}",
+            unit=f"z-score vs seasonal baseline ({period})",
+            status=gw_status,
+            note=gw_note if gw_note else direction,
+            context=" · ".join(ctx_parts),
+            source="GPEI EECA Groundwater Level Monitoring (OD0038)",
+            tier=2, date=GENERATED))
+    else:
+        t2.append(manual("Aquifer Level — PEI", "see princeedwardisland.ca",
+            source="GPEI EECA — OD0038", tier=2,
+            note="~50% of residents on central water; remainder on private wells"))
     # ── Nitrate-N — GPEI Drinking Water Quality OD0039 ─────────────────────
     nitrate = fetch_nitrate_pei()
     if nitrate and nitrate.get('mean_latest') is not None:
@@ -1998,19 +2202,6 @@ def scrape_financial():
         t2.append(manual("PEI CPI (YoY)", "see statcan.gc.ca/18-10-0004",
             source="Statistics Canada", tier=2,
             note="Monthly release — PEI-specific price levels"))
-
-    vacancy, v_period = fetch_cmhc_vacancy()
-    if vacancy is not None:
-        t2.append(indicator("Charlottetown Vacancy Rate", f"{vacancy:.1f}",
-            unit=f"%  ({v_period})",
-            status="alert" if vacancy < 1.0 else "warn" if vacancy < 2.0 else "ok",
-            note=("Critical housing shortage — vacancy below 1%" if vacancy < 1.0
-                  else "Very low vacancy — Charlottetown housing stress" if vacancy < 2.0 else ""),
-            source="CMHC Housing Market Information Portal", tier=2, date=GENERATED))
-    else:
-        t2.append(manual("Housing Vacancy Rate", "see CMHC Housing Market",
-            source="CMHC", tier=2,
-            note="Charlottetown among lowest vacancy rates in Atlantic Canada"))
 
     t3.append(manual("Lobster Ex-Vessel Price", "see GPEI Fisheries",
         source="GPEI Fisheries and Communities", tier=3,
