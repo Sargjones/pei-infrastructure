@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's at Stake — Energy | PEI Infrastructure Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&family=DM+Mono:wght@0,400;0,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#eef6fb;--surface:#f7fbfe;--border:rgba(30,80,130,0.13);
+  --text1:#0f2335;--text2:#2c5270;--text3:#6a9ab8;
+  --accent:#1558a0;--accent2:#c47c20;
+  --ok:#1a7a52;--warn:#8a5800;--alert:#a02828;
+  --font-head:'Playfair Display',Georgia,serif;
+  --font-body:'Source Sans 3',sans-serif;
+  --font-mono:'DM Mono',monospace;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0d1e2e;--surface:#142436;--border:rgba(140,190,230,0.12);
+  --text1:#ddeeff;--text2:#7aaecf;--text3:#3a6888;
+  --accent:#5aaee8;--accent2:#e0a030;
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text1);font-family:var(--font-body);font-size:16px;line-height:1.65;min-height:100vh;}
+.page-wrap{max-width:780px;margin:0 auto;padding:2.5rem 1.5rem 5rem;}
+.back-nav{font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-bottom:2.5rem;letter-spacing:.04em;}
+.back-nav a{color:var(--accent);text-decoration:none;}
+.back-nav a:hover{text-decoration:underline;}
+.hero-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.5rem;}
+.hero-title{font-family:var(--font-head);font-size:clamp(2rem,5vw,3rem);font-weight:700;color:var(--text1);line-height:1.15;margin-bottom:1rem;}
+.hero-subtitle{font-size:1.15rem;color:var(--text2);max-width:600px;margin-bottom:2.5rem;font-weight:300;}
+.hero-rule{border:none;border-top:2px solid var(--accent);opacity:.25;margin-bottom:3rem;}
+.fact-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:3rem;}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;}
+.fact-num{font-family:var(--font-head);font-size:2rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:.25rem;}
+.fact-label{font-size:.8rem;color:var(--text2);line-height:1.4;}
+.section{margin-bottom:2.8rem;}
+.section-title{font-family:var(--font-head);font-size:1.35rem;font-weight:600;color:var(--text1);margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);}
+.section-body{color:var(--text2);font-size:.97rem;line-height:1.7;}
+.section-body p{margin-bottom:.85rem;}
+.section-body p:last-child{margin-bottom:0;}
+.section-body strong{color:var(--text1);font-weight:600;}
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;margin-top:1.25rem;}
+.risk-card{border-radius:8px;padding:1rem 1.2rem;border-left:3px solid;}
+.risk-card.high{border-color:var(--alert);background:rgba(160,40,40,.06);}
+.risk-card.medium{border-color:var(--warn);background:rgba(138,88,0,.06);}
+.risk-card.low{border-color:var(--ok);background:rgba(26,122,82,.06);}
+.risk-title{font-size:.82rem;font-family:var(--font-mono);font-weight:500;margin-bottom:.4rem;text-transform:uppercase;letter-spacing:.06em;}
+.risk-card.high .risk-title{color:var(--alert);}
+.risk-card.medium .risk-title{color:var(--warn);}
+.risk-card.low .risk-title{color:var(--ok);}
+.risk-body{font-size:.88rem;color:var(--text2);line-height:1.5;}
+.threshold-table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:1rem;}
+.threshold-table th{font-family:var(--font-mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--border);}
+.threshold-table td{padding:.55rem .75rem;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top;}
+.threshold-table tr:last-child td{border-bottom:none;}
+.pill{display:inline-block;border-radius:4px;padding:.15rem .5rem;font-size:.75rem;font-family:var(--font-mono);font-weight:500;}
+.pill-ok{background:rgba(26,122,82,.12);color:var(--ok);}
+.pill-warn{background:rgba(138,88,0,.12);color:var(--warn);}
+.pill-alert{background:rgba(160,40,40,.12);color:var(--alert);}
+/* Cable diagram */
+.cable-diagram{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.5rem;margin:1.25rem 0;font-family:var(--font-mono);font-size:.82rem;color:var(--text2);}
+.cable-diagram .flow{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem;}
+.cable-diagram .node{background:var(--bg);border:1px solid var(--border2,var(--border));border-radius:6px;padding:.4rem .8rem;color:var(--text1);font-size:.8rem;white-space:nowrap;}
+.cable-diagram .arrow{color:var(--text3);font-size:1rem;}
+.cable-diagram .note{font-size:.78rem;color:var(--text3);margin-top:.5rem;}
+.profile-footer{margin-top:4rem;padding-top:1.5rem;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:.75rem;color:var(--text3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="back-nav">
+    <a href="index.html">← PEI Infrastructure Intelligence</a> &nbsp;/&nbsp; Energy
+  </div>
+
+  <div class="hero-label">What's at stake — Energy</div>
+  <h1 class="hero-title">One Cable.<br>One Province.</h1>
+  <p class="hero-subtitle">PEI generates a fraction of its own electricity. The rest arrives via a single undersea cable from New Brunswick — a geographic dependency unlike any other Canadian province.</p>
+  <hr class="hero-rule">
+
+  <div class="fact-strip">
+    <div class="fact-card">
+      <div class="fact-num">300 MW</div>
+      <div class="fact-label">maximum capacity of the NB Power submarine cable interconnect</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">403 MW</div>
+      <div class="fact-label">all-time PEI peak demand — January 25, 2026 at 5:44 PM</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">~30%</div>
+      <div class="fact-label">of electricity generated on-island (wind + backup turbines)</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">86,000</div>
+      <div class="fact-label">Maritime Electric customers — every home and business on PEI</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The grid dependency</h2>
+    <div class="section-body">
+      <p>Maritime Electric, PEI's primary utility, serves roughly 86,000 customers across the island. (Summerside operates its own municipal electric utility serving approximately 9,000 customers.) At any given moment, the vast majority of electricity consumed on PEI is generated in New Brunswick and transmitted via submarine cable across the Northumberland Strait.</p>
+
+      <div class="cable-diagram">
+        <div class="flow">
+          <span class="node">NB Power grid</span>
+          <span class="arrow">→</span>
+          <span class="node">Submarine cable<br><small>~300 MW cap</small></span>
+          <span class="arrow">→</span>
+          <span class="node">Maritime Electric<br><small>PEI distribution</small></span>
+          <span class="arrow">→</span>
+          <span class="node">86,000 customers</span>
+        </div>
+        <div class="flow">
+          <span class="node">PEI Wind farms</span>
+          <span class="arrow">→</span>
+          <span class="node" style="opacity:.6">On-island grid<br><small>variable output</small></span>
+        </div>
+        <div class="note">On peak winter evenings, PEI demand can exceed cable capacity — requiring load management or controlled outages.</div>
+      </div>
+
+      <p>This structure creates a supply chain with a single critical chokepoint. A cable failure during a January cold snap — when demand peaks between 6–10 AM and 4–9 PM — would immediately push the island beyond what on-island generation can supply. On-island backup consists primarily of combustion turbines and whatever wind is producing at that moment.</p>
+      <p>The January 2026 all-time demand record of <strong>403 MW</strong> exceeded the cable's 300 MW rated capacity, meaning load was managed through some combination of demand response, on-island generation, and real-time import management. The cable is physically rated higher than 300 MW in short bursts, but sustained operation above that level stresses the infrastructure.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Wind: the local generator</h2>
+    <div class="section-body">
+      <p>PEI has a significant wind energy program, with turbines concentrated primarily along the island's north and south shores. Wind is the dominant source of on-island electricity generation — but it is inherently variable. When wind is strong and demand is moderate, PEI occasionally exports power to New Brunswick. When wind drops during peak demand, the cable makes up the difference.</p>
+      <p>The dashboard tracks wind generation as a real-time percentage of island load. This number is the clearest single indicator of how much the island is relying on imports at any given moment. <strong>Wind at 80%+ of load</strong> means the island is near energy self-sufficient that hour. Wind at 10% during a cold evening means the cable is carrying close to its maximum.</p>
+      <p>PEI has no utility-scale battery storage as of 2026. Each unit of wind that cannot be used immediately is either exported or curtailed. This limits the island's ability to buffer wind variability against demand peaks.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dashboard thresholds explained</h2>
+    <table class="threshold-table">
+      <thead>
+        <tr><th>Indicator</th><th>Status</th><th>Threshold</th><th>What it means</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Grid Status Index</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>Normal (01)</td>
+          <td>Supply meets demand with margin — no active load management</td>
+        </tr>
+        <tr>
+          <td>Grid Status Index</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>Watch / Warning (02–03)</td>
+          <td>Maritime Electric monitoring closely — voluntary conservation requested</td>
+        </tr>
+        <tr>
+          <td>Grid Status Index</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>Load Shedding (04)</td>
+          <td>Rotating controlled outages — demand exceeds available supply</td>
+        </tr>
+        <tr>
+          <td>NB Power cable import</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&lt;75% of 300 MW cap</td>
+          <td>Comfortable margin — normal operating range</td>
+        </tr>
+        <tr>
+          <td>NB Power cable import</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>75–90% of cap</td>
+          <td>Elevated import dependency — limited reserve margin</td>
+        </tr>
+        <tr>
+          <td>NB Power cable import</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&gt;90% of cap</td>
+          <td>Near cable capacity — any disruption risks supply shortfall</td>
+        </tr>
+        <tr>
+          <td>Wind generation</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&gt;40% of island load</td>
+          <td>Strong on-island generation — reduced import dependency</td>
+        </tr>
+        <tr>
+          <td>Wind generation</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>10–40% of load</td>
+          <td>Moderate wind — typical operating range</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Key risks</h2>
+    <div class="risk-grid">
+      <div class="risk-card high">
+        <div class="risk-title">High — Cable failure in winter</div>
+        <div class="risk-body">A submarine cable fault during peak demand (January–February, 4–9 PM) could leave PEI unable to meet load. On-island generation cannot sustain the full island without imports during cold weather.</div>
+      </div>
+      <div class="risk-card high">
+        <div class="risk-title">High — NB Power supply disruption</div>
+        <div class="risk-body">PEI has limited ability to negotiate around NB Power. A major generation shortfall in New Brunswick — from extreme cold, unplanned outages, or a large storm — directly constrains what is available for export to PEI.</div>
+      </div>
+      <div class="risk-card medium">
+        <div class="risk-title">Medium — Demand growth outpacing cable</div>
+        <div class="risk-body">The 403 MW January 2026 peak already exceeded the cable's rated capacity. EV adoption and heat pump deployment will increase winter peak demand further over the next decade without offsetting storage or generation additions.</div>
+      </div>
+      <div class="risk-card medium">
+        <div class="risk-title">Medium — Storm damage to distribution</div>
+        <div class="risk-body">Post-tropical storm Fiona (September 2022) caused widespread outages across PEI lasting days to weeks. The island's overhead distribution network remains exposed to major storm events.</div>
+      </div>
+      <div class="risk-card low">
+        <div class="risk-title">Lower — Wind curtailment / export limits</div>
+        <div class="risk-body">On high-wind, low-demand nights, PEI may need to curtail wind output. This is an economic issue more than a supply issue, but limits the return on wind investment without storage.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="profile-footer">
+    <span>PEI Infrastructure Intelligence · Energy Sector</span>
+    <span>Sources: Maritime Electric graph API · GPEI Wind Energy · NRCan</span>
+  </div>
+
+</div>
+</body>
+</html>
