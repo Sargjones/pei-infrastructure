@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's at Stake — Water | PEI Infrastructure Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&family=DM+Mono:wght@0,400;0,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #eef6fb;
+  --surface: #f7fbfe;
+  --border:  rgba(30,80,130,0.13);
+  --text1:   #0f2335;
+  --text2:   #2c5270;
+  --text3:   #6a9ab8;
+  --accent:  #1558a0;
+  --accent2: #c47c20;
+  --ok:      #1a7a52;
+  --warn:    #8a5800;
+  --alert:   #a02828;
+  --font-head: 'Playfair Display', Georgia, serif;
+  --font-body: 'Source Sans 3', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1e2e; --surface: #142436; --border: rgba(140,190,230,0.12);
+    --text1: #ddeeff; --text2: #7aaecf; --text3: #3a6888;
+    --accent: #5aaee8; --accent2: #e0a030;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text1);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  min-height: 100vh;
+}
+.page-wrap { max-width: 780px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+
+/* ── Back nav ── */
+.back-nav {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 2.5rem;
+  letter-spacing: 0.04em;
+}
+.back-nav a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.back-nav a:hover { text-decoration: underline; }
+
+/* ── Hero ── */
+.hero-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+.hero-title {
+  font-family: var(--font-head);
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: 700;
+  color: var(--text1);
+  line-height: 1.15;
+  margin-bottom: 1rem;
+}
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text2);
+  max-width: 600px;
+  margin-bottom: 2.5rem;
+  font-weight: 300;
+}
+.hero-rule {
+  border: none;
+  border-top: 2px solid var(--accent);
+  opacity: 0.25;
+  margin-bottom: 3rem;
+}
+
+/* ── Fact strip ── */
+.fact-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 3rem;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+}
+.fact-num {
+  font-family: var(--font-head);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+.fact-label {
+  font-size: 0.8rem;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+/* ── Section ── */
+.section { margin-bottom: 2.8rem; }
+.section-title {
+  font-family: var(--font-head);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text1);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-body {
+  color: var(--text2);
+  font-size: 0.97rem;
+  line-height: 1.7;
+}
+.section-body p { margin-bottom: 0.85rem; }
+.section-body p:last-child { margin-bottom: 0; }
+.section-body strong { color: var(--text1); font-weight: 600; }
+
+/* ── Risk cards ── */
+.risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+.risk-card {
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  border-left: 3px solid;
+}
+.risk-card.high   { border-color: var(--alert); background: rgba(160,40,40,0.06); }
+.risk-card.medium { border-color: var(--warn);  background: rgba(138,88,0,0.06); }
+.risk-card.low    { border-color: var(--ok);    background: rgba(26,122,82,0.06); }
+.risk-title {
+  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.risk-card.high   .risk-title { color: var(--alert); }
+.risk-card.medium .risk-title { color: var(--warn);  }
+.risk-card.low    .risk-title { color: var(--ok);    }
+.risk-body { font-size: 0.88rem; color: var(--text2); line-height: 1.5; }
+
+/* ── Threshold table ── */
+.threshold-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin-top: 1rem;
+}
+.threshold-table th {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.threshold-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text2);
+  vertical-align: top;
+}
+.threshold-table tr:last-child td { border-bottom: none; }
+.pill {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+.pill-ok    { background: rgba(26,122,82,0.12); color: var(--ok); }
+.pill-warn  { background: rgba(138,88,0,0.12);  color: var(--warn); }
+.pill-alert { background: rgba(160,40,40,0.12); color: var(--alert); }
+
+/* ── Footer ── */
+.profile-footer {
+  margin-top: 4rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text3);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="back-nav">
+    <a href="index.html">← PEI Infrastructure Intelligence</a> &nbsp;/&nbsp; Water
+  </div>
+
+  <div class="hero-label">What's at stake — Water</div>
+  <h1 class="hero-title">One Aquifer.<br>Every Drop.</h1>
+  <p class="hero-subtitle">Prince Edward Island is the only Canadian province that relies entirely on groundwater for drinking water. There is no backup source.</p>
+  <hr class="hero-rule">
+
+  <div class="fact-strip">
+    <div class="fact-card">
+      <div class="fact-num">100%</div>
+      <div class="fact-label">of PEI drinking water from groundwater — unique in Canada</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">41%</div>
+      <div class="fact-label">of PEI land in agricultural use, the highest proportion in Canada</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">10 mg/L</div>
+      <div class="fact-label">Health Canada nitrate limit — exceeded in ~6% of private wells</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">17</div>
+      <div class="fact-label">observation wells monitoring the island aquifer in real time</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The sandstone aquifer</h2>
+    <div class="section-body">
+      <p>PEI sits on a fractured red sandstone formation that functions as the island's sole source of potable water. Unlike deep, confined aquifers in other provinces, PEI's aquifer is <strong>shallow and unconfined</strong> — meaning surface conditions directly affect water quality within weeks to months, not years.</p>
+      <p>Rain and snowmelt percolate through the soil and rock to recharge the aquifer continuously. This makes PEI highly sensitive to both drought (insufficient recharge) and agricultural contamination (rapid infiltration of surface chemicals). The same geology that makes the island productive farmland makes it vulnerable.</p>
+      <p>Approximately <strong>50% of Islanders</strong> are served by central water systems in Charlottetown, Summerside, Stratford, Cornwall, and several smaller municipalities. The other half draw from private wells — and those residents bear the most direct exposure to aquifer quality changes.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The nitrate problem</h2>
+    <div class="section-body">
+      <p>Nitrogen fertilizers used in potato production — PEI grows roughly one-third of Canada's potatoes — convert to nitrate-nitrogen in soil and migrate downward into groundwater. This is the island's most persistent water quality challenge.</p>
+      <p>The provincial mean nitrate concentration across monitored watersheds is approximately <strong>3.3 mg/L N-NO₃</strong>, well below the 10 mg/L Health Canada drinking water guideline. However, agricultural watersheds in Queens County — particularly the Dunk River and Westmorland River catchments — regularly exceed 5 mg/L, and individual wells have recorded values above 20 mg/L.</p>
+      <p>Elevated nitrate poses the greatest risk to <strong>infants under six months</strong>, where it interferes with blood oxygen transport (methemoglobinemia, or "blue baby syndrome"). For adults, chronic exposure above guideline levels has been associated with increased colorectal cancer risk in recent epidemiological literature.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dashboard thresholds explained</h2>
+    <table class="threshold-table">
+      <thead>
+        <tr>
+          <th>Indicator</th>
+          <th>Status</th>
+          <th>Threshold</th>
+          <th>What it means</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Aquifer level (z-score)</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>z &lt; +0.5</td>
+          <td>Water table near or above seasonal normal — good recharge conditions</td>
+        </tr>
+        <tr>
+          <td>Aquifer level (z-score)</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>z +0.5 to +1.5</td>
+          <td>Water table below seasonal normal — early drought stress signal</td>
+        </tr>
+        <tr>
+          <td>Aquifer level (z-score)</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>z &gt; +1.5</td>
+          <td>Significant drought stress — multiple wells well below seasonal baseline</td>
+        </tr>
+        <tr>
+          <td>Boil water advisories</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>0 active</td>
+          <td>No known bacterial contamination in central systems</td>
+        </tr>
+        <tr>
+          <td>Boil water advisories</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>1–5 active</td>
+          <td>Localized bacterial events — likely storm or infrastructure related</td>
+        </tr>
+        <tr>
+          <td>Boil water advisories</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&gt;5 active</td>
+          <td>Multiple concurrent events — elevated system-wide risk</td>
+        </tr>
+        <tr>
+          <td>Nitrate-N (watershed mean)</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&lt;5 mg/L, &lt;2% above limit</td>
+          <td>Provincial mean well within Health Canada guideline</td>
+        </tr>
+        <tr>
+          <td>Nitrate-N (watershed mean)</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>&gt;5 mg/L or 2–5% above limit</td>
+          <td>Elevated agricultural loading — monitor private well users</td>
+        </tr>
+        <tr>
+          <td>Nitrate-N (watershed mean)</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&gt;5% of samples above 10 mg/L or any site &gt;20 mg/L</td>
+          <td>Significant exceedances — private well advisories warranted</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Key risks</h2>
+    <div class="risk-grid">
+      <div class="risk-card high">
+        <div class="risk-title">High — Agricultural contamination</div>
+        <div class="risk-body">Nitrate migration from potato production is chronic and structural. It will not resolve without sustained changes to fertilizer application rates and riparian buffer enforcement.</div>
+      </div>
+      <div class="risk-card high">
+        <div class="risk-title">High — Drought stress on recharge</div>
+        <div class="risk-body">Summers with below-normal precipitation directly lower the water table. Combined with increased irrigation demand, drought years can produce aquifer stress within a single season.</div>
+      </div>
+      <div class="risk-card medium">
+        <div class="risk-title">Medium — Coastal saltwater intrusion</div>
+        <div class="risk-body">In coastal areas, excessive groundwater withdrawal or sea level rise can allow saltwater to migrate into freshwater wells — a growing concern as the island's coastline erodes at 0.3–1.0m/year in some areas.</div>
+      </div>
+      <div class="risk-card medium">
+        <div class="risk-title">Medium — Central system aging</div>
+        <div class="risk-body">The Charlottetown water treatment and distribution system has significant aging infrastructure. Main breaks trigger boil water advisories and can expose tens of thousands of users to risk.</div>
+      </div>
+      <div class="risk-card low">
+        <div class="risk-title">Lower — Bacterial events (post-storm)</div>
+        <div class="risk-body">Intense rainfall can cause surface runoff to overwhelm treatment capacity or infiltrate distribution systems. These events are typically short-lived but require rapid response.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Why the aquifer z-score matters</h2>
+    <div class="section-body">
+      <p>The 17 observation wells in the OD0038 dataset measure depth-to-water in metres — how far below the surface the water table sits. A higher reading means a deeper (lower) water table; a lower reading means a shallower (higher) water table. This creates a counterintuitive number for general audiences.</p>
+      <p>The dashboard converts these raw depths to a <strong>z-score</strong>: the departure from each well's historical average for that calendar month, expressed in standard deviations. A z-score of +1.5 means the water table is 1.5 standard deviations <em>below</em> normal for the season — a meaningful drought signal. A z-score of -1.0 means levels are above normal — good recharge.</p>
+      <p>Averaging across all active wells gives a provincial picture. This approach normalizes across wells with wildly different depths — Georgetown sits at ~4m, Caledonia at ~83m — and focuses on the departure from normal rather than the absolute level, which varies naturally by geology and location.</p>
+      <p><strong>Data lag:</strong> OD0038 is updated monthly, typically with a 2–4 month lag. The indicator reflects recent conditions, not real-time status.</p>
+    </div>
+  </div>
+
+  <div class="profile-footer">
+    <span>PEI Infrastructure Intelligence · Water Sector</span>
+    <span>Sources: GPEI EECA OD0038 · OD0039 · Health Canada drinking water guidelines</span>
+  </div>
+
+</div>
+</body>
+</html>
