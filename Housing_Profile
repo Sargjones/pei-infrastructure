@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What's at Stake — Housing | PEI Infrastructure Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;500;600&family=DM+Mono:wght@0,400;0,500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef6fb;--surface:#f7fbfe;--border:rgba(30,80,130,0.13);--text1:#0f2335;--text2:#2c5270;--text3:#6a9ab8;--accent:#1558a0;--accent2:#c47c20;--ok:#1a7a52;--warn:#8a5800;--alert:#a02828;--font-head:'Playfair Display',Georgia,serif;--font-body:'Source Sans 3',sans-serif;--font-mono:'DM Mono',monospace;}
+@media(prefers-color-scheme:dark){:root{--bg:#0d1e2e;--surface:#142436;--border:rgba(140,190,230,0.12);--text1:#ddeeff;--text2:#7aaecf;--text3:#3a6888;--accent:#5aaee8;--accent2:#e0a030;}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text1);font-family:var(--font-body);font-size:16px;line-height:1.65;min-height:100vh;}
+.page-wrap{max-width:780px;margin:0 auto;padding:2.5rem 1.5rem 5rem;}
+.back-nav{font-family:var(--font-mono);font-size:11px;color:var(--text3);margin-bottom:2.5rem;letter-spacing:.04em;}
+.back-nav a{color:var(--accent);text-decoration:none;}
+.back-nav a:hover{text-decoration:underline;}
+.hero-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:.5rem;}
+.hero-title{font-family:var(--font-head);font-size:clamp(2rem,5vw,3rem);font-weight:700;color:var(--text1);line-height:1.15;margin-bottom:1rem;}
+.hero-subtitle{font-size:1.15rem;color:var(--text2);max-width:600px;margin-bottom:2.5rem;font-weight:300;}
+.hero-rule{border:none;border-top:2px solid var(--accent);opacity:.25;margin-bottom:3rem;}
+.fact-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:3rem;}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.2rem;}
+.fact-num{font-family:var(--font-head);font-size:2rem;font-weight:700;color:var(--accent);line-height:1;margin-bottom:.25rem;}
+.fact-label{font-size:.8rem;color:var(--text2);line-height:1.4;}
+.section{margin-bottom:2.8rem;}
+.section-title{font-family:var(--font-head);font-size:1.35rem;font-weight:600;color:var(--text1);margin-bottom:.75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border);}
+.section-body{color:var(--text2);font-size:.97rem;line-height:1.7;}
+.section-body p{margin-bottom:.85rem;}
+.section-body p:last-child{margin-bottom:0;}
+.section-body strong{color:var(--text1);font-weight:600;}
+/* Timeline */
+.timeline{margin:1.25rem 0;position:relative;padding-left:1.75rem;}
+.timeline::before{content:'';position:absolute;left:.5rem;top:.25rem;bottom:.25rem;width:2px;background:var(--border);}
+.tl-item{position:relative;margin-bottom:1.25rem;}
+.tl-item::before{content:'';position:absolute;left:-1.25rem;top:.45rem;width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);}
+.tl-year{font-family:var(--font-mono);font-size:.78rem;color:var(--accent);font-weight:500;margin-bottom:.2rem;}
+.tl-body{font-size:.9rem;color:var(--text2);line-height:1.55;}
+.tl-body strong{color:var(--text1);}
+.threshold-table{width:100%;border-collapse:collapse;font-size:.88rem;margin-top:1rem;}
+.threshold-table th{font-family:var(--font-mono);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:left;padding:.5rem .75rem;border-bottom:1px solid var(--border);}
+.threshold-table td{padding:.55rem .75rem;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top;}
+.threshold-table tr:last-child td{border-bottom:none;}
+.pill{display:inline-block;border-radius:4px;padding:.15rem .5rem;font-size:.75rem;font-family:var(--font-mono);font-weight:500;}
+.pill-ok{background:rgba(26,122,82,.12);color:var(--ok);}
+.pill-warn{background:rgba(138,88,0,.12);color:var(--warn);}
+.pill-alert{background:rgba(160,40,40,.12);color:var(--alert);}
+.profile-footer{margin-top:4rem;padding-top:1.5rem;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:.75rem;color:var(--text3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem;}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <div class="back-nav">
+    <a href="index.html">← PEI Infrastructure Intelligence</a> &nbsp;/&nbsp; Housing
+  </div>
+
+  <div class="hero-label">What's at stake — Housing</div>
+  <h1 class="hero-title">The Fastest Surge.<br>The Sharpest Turn.</h1>
+  <p class="hero-subtitle">PEI went from Canada's tightest rental market to a rapidly easing one in a single year — driven by immigration policy changes that nobody predicted would hit a small island this hard.</p>
+  <hr class="hero-rule">
+
+  <div class="fact-strip">
+    <div class="fact-card">
+      <div class="fact-num">0.5%</div>
+      <div class="fact-label">Charlottetown vacancy rate, October 2023 — lowest in Canada</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">2.0%</div>
+      <div class="fact-label">Charlottetown vacancy rate, October 2025 — sharpest one-year jump in 30 years</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">$427</div>
+      <div class="fact-label">increase in avg Charlottetown 2BR rent since 2022 — now $1,354/mo</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-num">1,769</div>
+      <div class="fact-label">housing starts in PEI in 2025 — highest since the 1970s</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The arc of the crisis</h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-year">2020–2021</div>
+        <div class="tl-body">COVID-era interprovincial migration arrives. Remote workers and lifestyle migrants discover PEI. Population grows at rates not seen in decades. Vacancy rate drops below 2%.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-year">2022</div>
+        <div class="tl-body"><strong>Vacancy hits 0.8% provincially, 0.8% in Charlottetown.</strong> At this level, renters have almost no mobility — taking a new job in a different neighbourhood means risking your housing entirely. PEI records the lowest vacancy rate in Canada.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-year">2023</div>
+        <div class="tl-body">Non-permanent residents surge. International students, TFWs, and economic immigrants add thousands to PEI's population in a single year — a 3.9% growth rate, highest in Canada and highest in PEI history. Charlottetown vacancy drops further to <strong>0.5%</strong>.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-year">2024</div>
+        <div class="tl-body">Federal government announces immigration caps. Study permit limits, TFW reductions, population strategy target of 200,000 by 2030. Non-permanent residents begin leaving faster than arriving. PEI records its <strong>first quarterly population decline</strong> since 2020. Housing starts hit a record 1,684 — finally breaking ground on projects approved during the crisis years.</div>
+      </div>
+      <div class="tl-item">
+        <div class="tl-year">2025</div>
+        <div class="tl-body">The sharpest vacancy rate swing in a generation. Charlottetown rises from 0.7% to <strong>2.0%</strong> in a single year. PEI province rises to 2.5%. Rent growth slows. Social housing waitlist falls to <strong>389</strong> — lowest in over a decade. 1,769 housing starts. But average 2BR rent is still $1,354 — up 46% since 2022.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">What vacancy rate means for real people</h2>
+    <div class="section-body">
+      <p>A vacancy rate measures the share of rental units that are empty and available. Economists consider <strong>3.5–4.0%</strong> a balanced market — enough vacancy that landlords have to compete for tenants and rents track roughly with inflation. Below that threshold, landlords have structural pricing power and renters have no leverage.</p>
+      <p>At 0.5%, Charlottetown in 2023 was at roughly 1-in-200 units available. A renter who needed to move — due to job change, family situation, unit renovation, or landlord sale — faced a near-impossible search. Practical consequences included: bidding wars on rentals, acceptance of units in poor condition, commuting from rural communities hours away, and people leaving the island or staying in abusive or overcrowded situations rather than face the market.</p>
+      <p>At 2.0%, conditions are meaningfully better but still tight. The balanced market threshold of 3.5% represents roughly 1-in-28 units available — enough that a renter searching for three to four weeks can typically find something suitable. PEI is not there yet.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">The supply response</h2>
+    <div class="section-body">
+      <p>PEI's housing construction industry responded to the crisis, but with the lag that is inherent to construction. A building approved in 2022 typically opens in 2024 or 2025. The record 1,684 starts in 2024 and 1,769 in 2025 represent years of pipeline development — and they hit the market just as demand softened due to immigration policy changes.</p>
+      <p>The provincial government has set a target of <strong>2,000 units per year</strong> — a level not sustained since the 1970s. Meeting this target requires not just market-rate construction but affordable and social housing investment, since market rents at $1,354/2BR are inaccessible to households earning below the provincial median.</p>
+      <p>The social housing waitlist reduction to 389 households (March 2025) reflects both new supply additions and reduced demand from departing temporary residents. It is not evidence that housing affordability is solved — a $1,354 two-bedroom apartment requires roughly $54,000 in gross annual household income at standard rent-to-income ratios, and median PEI household income is approximately $75,000.</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">Dashboard thresholds explained</h2>
+    <table class="threshold-table">
+      <thead>
+        <tr><th>Indicator</th><th>Status</th><th>Threshold</th><th>What it means</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Charlottetown vacancy rate</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&lt;1.0%</td>
+          <td>Crisis conditions — renters have near-zero mobility or choice</td>
+        </tr>
+        <tr>
+          <td>Charlottetown vacancy rate</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>1.0–3.5%</td>
+          <td>Tight market — below balanced threshold, landlord pricing power</td>
+        </tr>
+        <tr>
+          <td>Charlottetown vacancy rate</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&gt;3.5%</td>
+          <td>Balanced market — renter choice, rents track inflation</td>
+        </tr>
+        <tr>
+          <td>Housing starts — PEI annual</td>
+          <td><span class="pill pill-ok">OK</span></td>
+          <td>&gt;1,500 units/yr</td>
+          <td>Above sustained recent average — strong supply pipeline</td>
+        </tr>
+        <tr>
+          <td>Housing starts — PEI annual</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>1,000–1,500/yr</td>
+          <td>Moderate supply — below provincial 2,000/yr target</td>
+        </tr>
+        <tr>
+          <td>Housing starts — PEI annual</td>
+          <td><span class="pill pill-alert">ALERT</span></td>
+          <td>&lt;1,000/yr</td>
+          <td>Insufficient supply — crisis conditions likely to worsen</td>
+        </tr>
+        <tr>
+          <td>PEI population (quarterly)</td>
+          <td><span class="pill pill-warn">WARN</span></td>
+          <td>Decline &gt;200 persons/quarter</td>
+          <td>Significant NPR outflow — housing demand falling faster than supply</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="profile-footer">
+    <span>PEI Infrastructure Intelligence · Housing Sector</span>
+    <span>Sources: CMHC HMiP · Statistics Canada 34-10-0126-01 · 17-10-0009-01</span>
+  </div>
+
+</div>
+</body>
+</html>
