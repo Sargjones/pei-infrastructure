@@ -1,6 +1,6 @@
 {
-  "generated": "2026-04-07 03:29 UTC",
-  "timestamp": "2026-04-07 03:29 UTC",
+  "generated": "2026-04-07 07:49 UTC",
+  "timestamp": "2026-04-07 07:49 UTC",
   "source": "PEI Infrastructure Intelligence v2",
   "sectors": {
     "energy": {
@@ -10,33 +10,33 @@
           "indicators": [
             {
               "label": "Island System Load",
-              "value": "213.0",
+              "value": "218.0",
               "unit": "MW",
               "status": "ok",
               "context": "Peak record: ~400 MW (Jan/Feb)",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via reinvented.net",
               "tier": 1,
               "muted": false
             },
             {
               "label": "NB Cable Utilization",
-              "value": "36.3",
-              "unit": "% of 300 MW cap  (109 MW imported)",
+              "value": "36.7",
+              "unit": "% of 300 MW cap  (110 MW imported)",
               "status": "ok",
               "context": "4 subsea cables — hard physical limit",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via reinvented.net",
               "tier": 1,
               "muted": false
             },
             {
               "label": "Wind Generation",
-              "value": "107.0",
-              "unit": "MW  (50.2% of load)",
+              "value": "111.0",
+              "unit": "MW  (50.9% of load)",
               "status": "ok",
               "context": "~204 MW installed wind capacity on PEI",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via GPEI",
               "tier": 1,
               "muted": false
@@ -54,7 +54,7 @@
               "label": "Outage Customers",
               "value": "check map",
               "status": "manual",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "poweroutage.com / Maritime Electric",
               "tier": 1,
               "muted": false
@@ -70,7 +70,7 @@
               "unit": "MW",
               "status": "ok",
               "context": "Slemon Park, Sunbank + batteries",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
@@ -81,17 +81,17 @@
               "unit": "MW",
               "status": "ok",
               "context": "Combustion turbines — last resort backup",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
             },
             {
               "label": "NB Import",
-              "value": "109",
+              "value": "110",
               "unit": "MW  (cap: 300 MW)",
               "status": "ok",
-              "date": "2026-04-07T00:14:45.57",
+              "date": "2026-04-07T04:44:45.467",
               "source": "Maritime Electric via GPEI",
               "tier": 2,
               "muted": false
@@ -116,7 +116,7 @@
               "status": "warn",
               "note": "Above 175¢/L — elevated heating cost burden on island households",
               "context": "~35% of PEI households rely on fuel oil for heat",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Natural Resources Canada — weekly retail prices",
               "tier": 3,
               "muted": false
@@ -133,14 +133,14 @@
         }
       },
       "chart_data": {
-        "load": 213.0,
-        "wind": 107.0,
+        "load": 218.0,
+        "wind": 111.0,
         "solar": -3.0,
         "fossil": 0.0,
-        "nb_import": 109.0,
+        "nb_import": 110.0,
         "cable_cap": 300,
         "peak_record": 400,
-        "updated": "2026-04-07T00:14:45.57"
+        "updated": "2026-04-07T04:44:45.467"
       },
       "label": "Energy"
     },
@@ -155,7 +155,7 @@
               "unit": "active",
               "status": "ok",
               "context": "100% groundwater province — unique in Canada",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "GPEI Environment, Energy and Climate Action",
               "tier": 1,
               "muted": false
@@ -167,12 +167,12 @@
           "indicators": [
             {
               "label": "Aquifer Level — PEI",
-              "value": "-17.98",
+              "value": "-0.98",
               "unit": "z-score vs seasonal baseline (2024-12)",
               "status": "ok",
-              "note": "Strong recharge — aquifer above seasonal normal",
-              "context": "9 observation wells · Period: 2024-12 · Driest: Knutsford (+0.35m) · 100% groundwater province",
-              "date": "2026-04-07 03:29 UTC",
+              "note": "above seasonal normal — good recharge",
+              "context": "9 observation wells · Period: 2024-12 · 100% groundwater province",
+              "date": "2026-04-07 07:49 UTC",
               "source": "GPEI EECA Groundwater Level Monitoring (OD0038)",
               "tier": 2,
               "muted": false
@@ -188,7 +188,7 @@
               "unit": "mg/L mean · 46 sites · 2025-05-08",
               "status": "ok",
               "context": "Latest round max: 9.2 mg/L (DUNK RIVER) · Provincial mean: 3.28 mg/L · Health Canada limit: 10 mg/L",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "GPEI EECA — Drinking Water Quality (OD0039)",
               "tier": 3,
               "muted": false
@@ -221,12 +221,12 @@
             },
             {
               "label": "QEH Emergency Department",
-              "value": "73",
+              "value": "55",
               "unit": "total patients in ED",
-              "status": "alert",
-              "note": "Level 3 (Urgent) wait >10 hours — 13 patients affected",
-              "context": "Waiting: 31 · Level 2: 7 (3-4 hours) · Level 3: 13 (> 10 hours) · With physician: 26",
-              "date": "Last updated April 7, 2026 12:30 AM",
+              "status": "warn",
+              "note": "Level 3 (Urgent) wait >10 hours — 12 patients affected",
+              "context": "Waiting: 24 · Level 2: 1 (6-7 hours) · Level 3: 12 (> 10 hours) · With physician: 15",
+              "date": "Last updated April 7, 2026 04:45 AM",
               "source": "Health PEI (GPEI /api/workflow)",
               "tier": 1,
               "muted": false
@@ -238,11 +238,12 @@
           "indicators": [
             {
               "label": "Prince County Hospital ED",
-              "value": "37",
+              "value": "41",
               "unit": "total patients in ED",
-              "status": "ok",
-              "context": "Waiting: 11 · Level 2: 5 (4-5 hours) · Level 3: 3 (8-9 hours) · With physician: 21",
-              "date": "Last updated April 7, 2026 12:30 AM",
+              "status": "warn",
+              "note": "Level 3 (Urgent) wait >10 hours — 5 patients affected",
+              "context": "Waiting: 14 · Level 2: 5 (8-9 hours) · Level 3: 5 (> 10 hours) · With physician: 22",
+              "date": "Last updated April 7, 2026 04:45 AM",
               "source": "Health PEI (GPEI /api/workflow)",
               "tier": 2,
               "muted": false
@@ -252,7 +253,7 @@
               "value": "Closed",
               "status": "alert",
               "note": "Western Hospital's emergency department is closed. It will reopen at 8 a.m.  For a life-threatening emergency, call 911.",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Health PEI / GPEI",
               "tier": 2,
               "muted": false
@@ -262,7 +263,7 @@
               "value": "Closed",
               "status": "alert",
               "note": "Kings County Memorial Hospital's emergency department is closed. It will reopen at 8 a.m.  For a life-threatening emerge",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Health PEI / GPEI",
               "tier": 2,
               "muted": false
@@ -271,7 +272,7 @@
               "label": "Respiratory Illness Activity",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Health PEI",
               "tier": 2,
               "muted": false
@@ -305,7 +306,7 @@
               "value": "Open",
               "status": "ok",
               "context": "12.9 km fixed link — primary supply corridor",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "confederationbridge.com",
               "tier": 1,
               "muted": false
@@ -329,7 +330,7 @@
               "unit": "Wood Islands ↔ Pictou",
               "status": "manual",
               "context": "Seasonal alternate crossing (May–Dec) · 75 min",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "ferries.ca",
               "tier": 2,
               "muted": false
@@ -338,8 +339,8 @@
               "label": "Charlottetown Airport (YYG)",
               "value": "VFR",
               "status": "ok",
-              "context": "METAR: METAR CYYG 070300Z 29009KT 15SM OVC045 00/M05 A2980 RMK",
-              "date": "2026-04-07 03:29 UTC",
+              "context": "METAR: SPECI CYYG 070721Z 29009KT 15SM -SN OVC028 M01/M07 A299",
+              "date": "2026-04-07 07:49 UTC",
               "source": "AviationWeather.gov METAR",
               "tier": 2,
               "muted": false
@@ -348,7 +349,7 @@
               "label": "Island Road Conditions",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "GPEI Transportation and Infrastructure",
               "tier": 2,
               "muted": false
@@ -384,7 +385,7 @@
               "status": "warn",
               "note": "Below balanced-market threshold of 3.5–4.0%.",
               "context": "PEI province: 2.5% · 2BR: 0.6% · Balanced market: 3.5–4.0%",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "CMHC Housing Market Information Portal (annual Oct survey)",
               "tier": 1,
               "muted": false
@@ -401,7 +402,7 @@
               "status": "ok",
               "note": "$+139 vs 2022 baseline",
               "context": "PEI province avg: $1,052 · 2022 baseline: $927",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "CMHC Housing Market Information Portal",
               "tier": 2,
               "muted": false
@@ -413,7 +414,7 @@
               "status": "ok",
               "note": "+75 vs 2024",
               "context": "Provincial target: 2,000/yr · Trailing 12m: 4,602",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Statistics Canada 34-10-0126-01",
               "tier": 2,
               "muted": false
@@ -425,7 +426,7 @@
               "status": "warn",
               "note": "Declining — NPR exodus following federal immigration cuts",
               "context": "-507 vs prev quarter · Provincial cap target: 200,000 by 2030",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Statistics Canada 17-10-0009-01 (vector v8)",
               "tier": 2,
               "muted": false
@@ -441,7 +442,7 @@
               "unit": "% (2025 October)",
               "status": "ok",
               "context": "2BR: 1.1% · Charlottetown: 2.0% · Balanced: 3.5–4.0%",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "CMHC HMiP",
               "tier": 3,
               "muted": false
@@ -471,7 +472,7 @@
               "unit": "CAD per USD",
               "status": "ok",
               "context": "BoC as of 2026-04-06",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Bank of Canada Valet API",
               "tier": 1,
               "muted": false
@@ -487,7 +488,7 @@
               "unit": "All-items · index: 169.5",
               "status": "ok",
               "context": "Reference: 2026-02",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Statistics Canada table 18-10-0004",
               "tier": 2,
               "muted": false
@@ -531,7 +532,7 @@
               "unit": "active alerts",
               "status": "ok",
               "context": "ECCC public alerting — Alert Ready",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Environment and Climate Change Canada",
               "tier": 1,
               "muted": false
@@ -540,7 +541,7 @@
               "label": "PEI EMO Status",
               "value": "Normal",
               "status": "ok",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "PEI Emergency Measures Organization",
               "tier": 1,
               "muted": false
@@ -552,11 +553,11 @@
           "indicators": [
             {
               "label": "Charlottetown Harbour Level",
-              "value": "1.669",
+              "value": "2.574",
               "unit": "m (chart datum)",
               "status": "ok",
-              "context": "Predicted: 1.625m  |  Anomaly: +0.044m",
-              "date": "2026-04-07 03:29 UTC",
+              "context": "Predicted: 2.377m  |  Anomaly: +0.197m",
+              "date": "2026-04-07 07:49 UTC",
               "source": "CHS IWLS API (DFO) — station 01700",
               "tier": 2,
               "muted": false
@@ -585,11 +586,11 @@
           "indicators": [
             {
               "label": "Storm Surge (Charlottetown)",
-              "value": "+0.044",
+              "value": "+0.197",
               "unit": "m above predicted tide",
               "status": "ok",
               "context": "Positive = water above predicted tide level",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "CHS IWLS API (DFO)",
               "tier": 3,
               "muted": false
@@ -673,7 +674,7 @@
               "unit": "YoY  ·  index: 212.9  ·  2026-02",
               "status": "ok",
               "context": "Island logistics premium: all non-local food crosses the Confederation Bridge",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Statistics Canada table 18-10-0004",
               "tier": 2,
               "muted": false
@@ -683,7 +684,7 @@
               "value": "147.5",
               "unit": "¢/L  ·  2026-02  (+6.2 vs prev month)",
               "status": "ok",
-              "date": "2026-04-07 03:29 UTC",
+              "date": "2026-04-07 07:49 UTC",
               "source": "Statistics Canada table 18-10-0001",
               "tier": 2,
               "muted": false
