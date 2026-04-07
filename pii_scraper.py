@@ -811,6 +811,99 @@ def fetch_statcan_food_cpi_pei():
         return None
 
 
+
+def fetch_irac_petroleum_prices():
+    """
+    IRAC (Island Regulatory & Appeals Commission) current petroleum prices.
+    PEI is one of few regulated gasoline markets in Canada — IRAC sets min/max
+    pump prices, updated every Tuesday and Friday at 12:01 AM, plus unscheduled
+    adjustments when wholesale prices move significantly.
+
+    URL: https://irac.pe.ca/petrol/current-petroleum-prices/
+    No auth required, simple HTML table scrape.
+
+    Confirmed working April 7 2026 — page returned clean HTML with:
+      Regular gasoline:  198.3¢/L min, 199.4¢/L max  (April 3 2026)
+      Premium gasoline:  209.8¢/L min, 210.9¢/L max
+      Diesel:            256.3¢/L min, 257.5¢/L max
+      Furnace oil:       193.3¢/L max
+
+    Returns dict:
+      regular_min  — regular self-serve minimum ¢/L
+      regular_max  — regular self-serve maximum ¢/L
+      diesel_min   — diesel minimum ¢/L
+      furnace_max  — furnace oil maximum ¢/L
+      effective    — effective date string e.g. "April 03, 2026"
+    """
+    try:
+        from bs4 import BeautifulSoup as _BS
+        r = requests.get(
+            "https://irac.pe.ca/petrol/current-petroleum-prices/",
+            headers=HEADERS, timeout=TIMEOUT
+        )
+        if not r or not r.ok:
+            return None
+        soup = _BS(r.text, 'html.parser')
+
+        # Extract effective date from h3 heading
+        effective = ""
+        for h3 in soup.find_all('h3'):
+            text = h3.get_text(strip=True)
+            if 'Petroleum Prices' in text and '202' in text:
+                # e.g. "Petroleum Prices – April 03, 2026 – cents per litre"
+                import re
+                m = re.search(r'([A-Z][a-z]+ \d{2}, \d{4})', text)
+                if m:
+                    effective = m.group(1)
+                break
+
+        # Find all tables and extract MIN/MAX values
+        # The pump price table has rows like:
+        # "PUMP PRICE (SS)" | 198.3 | 199.4 | 204.0 | ... | 256.3 | 257.5
+        result = {'effective': effective}
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = [td.get_text(strip=True) for td in row.find_all(['td','th'])]
+                if not cells:
+                    continue
+                label = cells[0].upper()
+                if 'PUMP PRICE' in label and 'SS' in label and len(cells) >= 9:
+                    # cells: [label, reg_min, reg_max, mid_min, mid_max,
+                    #          prem_min, prem_max, diesel_min, diesel_max]
+                    try:
+                        result['regular_min'] = float(cells[1])
+                        result['regular_max'] = float(cells[2])
+                        result['diesel_min']  = float(cells[7])
+                        result['diesel_max']  = float(cells[8])
+                    except (ValueError, IndexError):
+                        pass
+
+        # Furnace oil max — look for "Maximum Price (After Tax)" row
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows:
+                cells = [td.get_text(strip=True) for td in row.find_all(['td','th'])]
+                if len(cells) >= 2 and 'Maximum Price (After Tax)' in cells[0]:
+                    try:
+                        result['furnace_max'] = float(cells[1])
+                    except (ValueError, IndexError):
+                        pass
+
+        if 'regular_min' not in result:
+            return None
+
+        print(f"  [IRAC] Regular={result['regular_min']}¢/L "
+              f"Diesel={result.get('diesel_min')}¢/L "
+              f"Furnace={result.get('furnace_max')}¢/L "
+              f"({effective})", file=sys.stderr)
+        return result
+
+    except Exception as e:
+        print(f"  [WARN] IRAC petroleum: {e}", file=sys.stderr)
+        return None
+
 def fetch_statcan_gasoline_charlottetown():
     """
     Statistics Canada table 18-10-0001-01 — Monthly avg retail gasoline prices.
@@ -2437,16 +2530,50 @@ def scrape_food():
                   "Food inflation above Bank of Canada 2% target" if f_stat == "warn" else ""),
             context="Island logistics premium: all non-local food crosses the Confederation Bridge",
             source="Statistics Canada table 18-10-0004", tier=2, date=GENERATED))
-        # Also add gasoline price if available
-        gas = fetch_statcan_gasoline_charlottetown()
-        if gas:
-            g_stat = "warn" if gas["price_cpl"] > 180 else "ok"
-            chg_str = f"  ({gas['change_cpl']:+.1f} vs prev month)" if gas.get("change_cpl") else ""
-            t2.append(indicator("Gasoline — Charlottetown", f"{gas['price_cpl']:.1f}",
-                unit=f"¢/L  ·  {gas['ref_period']}{chg_str}",
+        # ── Gasoline price — IRAC (primary) or StatCan (fallback) ────────────
+        # IRAC sets regulated min/max pump prices for PEI, updated Tue/Fri.
+        # Far more current than StatCan monthly average (typically 4-6 week lag).
+        irac = fetch_irac_petroleum_prices()
+        if irac and irac.get('regular_min'):
+            p       = irac['regular_min']
+            p_max   = irac.get('regular_max', p)
+            diesel  = irac.get('diesel_min')
+            furnace = irac.get('furnace_max')
+            eff     = irac.get('effective', '')
+            g_stat  = ("alert" if p > 210 else
+                       "warn"  if p > 185 else "ok")
+            ctx_parts = [f"Max: {p_max:.1f}¢/L"]
+            if diesel:
+                ctx_parts.append(f"Diesel min: {diesel:.1f}¢/L")
+            if furnace:
+                ctx_parts.append(f"Furnace oil max: {furnace:.1f}¢/L")
+            ctx_parts.append("IRAC regulated — updates Tue & Fri")
+            t2.append(indicator("Gasoline — PEI (IRAC max)",
+                f"{p:.1f}",
+                unit=f"¢/L self-serve min  ·  {eff}",
                 status=g_stat,
-                note="High gasoline price — elevated cost for island households and supply chains" if g_stat == "warn" else "",
-                source="Statistics Canada table 18-10-0001", tier=2, date=GENERATED))
+                note=("High fuel cost — elevated transport and heating burden"
+                      if g_stat == "alert" else
+                      "Above pre-2022 baseline" if g_stat == "warn" else ""),
+                context=" · ".join(ctx_parts),
+                source="IRAC (Island Regulatory & Appeals Commission)",
+                tier=2, date=GENERATED))
+        else:
+            # Fallback: StatCan monthly average (lagged ~4-6 weeks)
+            gas = fetch_statcan_gasoline_charlottetown()
+            if gas and gas.get('price_cpl'):
+                p      = gas['price_cpl']
+                ref    = gas.get('ref_period', '')
+                chg    = gas.get('change_cpl')
+                g_stat = "warn" if p > 185 else "ok"
+                chg_str = f"{chg:+.1f}¢ vs prev month" if chg is not None else ""
+                t2.append(indicator("Gasoline — Charlottetown",
+                    f"{p:.1f}",
+                    unit=f"¢/L monthly avg  ·  {ref}",
+                    status=g_stat,
+                    note="High gasoline price — elevated cost for island households" if g_stat == "warn" else "",
+                    context=chg_str if chg_str else "StatCan monthly avg — 4-6 week lag",
+                    source="Statistics Canada table 18-10-0001", tier=2, date=GENERATED))
     else:
         t2.append(manual("Grocery Price Index (PEI)", "see statcan.gc.ca",
             source="Statistics Canada", tier=2,
