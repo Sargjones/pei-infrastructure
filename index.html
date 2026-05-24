@@ -946,7 +946,7 @@ a:hover { text-decoration: underline; }
   const params = new URLSearchParams(window.location.search);
   const dataParam  = params.get("data");
   const briefParam = params.get("brief");
-  const BASE = "https://sargjones.github.io/pei-infrastructure/";
+  const BASE = "./";
   window._PII_DATA_URL  = dataParam  ? BASE + dataParam  : BASE + "pii_data_latest.json";
   window._PII_BRIEF_URL = briefParam ? BASE + briefParam : BASE + "pii_brief_latest.md";
 })();
