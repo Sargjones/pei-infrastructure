@@ -1,20 +1,26 @@
 """
-PEI Infrastructure Intelligence — Scraper  v3
+PEI Infrastructure Intelligence — Scraper v4
 ==============================================
 Mirrors TII data structure:
   { sectors: { <sector>: { tiers: { tier1: { indicators:[...] } } } } }
 
-New in v3 (on top of v2):
-  - CHS IWLS API — Charlottetown harbour real-time water level + storm surge
-  - CWFIS NRCan — Fire Weather Index (FWI) for PEI, daily CSV
-  - NOAA CoastWatch ERDDAP — Gulf of St. Lawrence SST anomaly
-  - AAFC Canadian Drought Monitor — GeoJSON, PEI polygon classification
+New in v4 (on top of v3):
+  - DataStream API — PEI surface water quality (DO, pH, turbidity, temperature)
+    DOI: 10.25976/g5s5-yj38  (GPEI EECA Surface Water Quality Monitoring)
+    Requires: DATASTREAM_API_KEY env var (add as GitHub Actions secret)
+  - ECCC Hydrometric — Dunk River + Morell River real-time discharge
+    High flow = elevated agricultural runoff risk to estuaries
+  - Port Charlottetown cruise schedule — next arrival, 30-day count
+  - Northumberland Ferry — live advisory/cancellation status
+  - CBC PEI RSS — lobster ex-vessel price (Marketing Board announcements)
+  - Cruise ship discharge risk — contextual card (no public monitoring exists)
 
 Run:   python pii_scraper.py
 Output: pii_data_YYYYMMDD.json  +  pii_data_latest.json
 """
 
 import json
+import os
 import re
 import sys
 import traceback
@@ -39,6 +45,10 @@ CABLE_CAP_MW   = 300
 PEAK_RECORD_MW = 400
 CHARLOTTETOWN_LAT, CHARLOTTETOWN_LON = 46.2382, -63.1311
 BRIDGE_LAT,        BRIDGE_LON        = 46.2500, -63.6800
+
+# DataStream API key — set as DATASTREAM_API_KEY GitHub Actions secret
+# Add to scrape.yml env block:  DATASTREAM_API_KEY: ${{ secrets.DATASTREAM_API_KEY }}
+DATASTREAM_API_KEY = os.environ.get("DATASTREAM_API_KEY", "")
 
 # ── GPEI ER Wait Times — Radware session cookies ──────────────────────────────
 # Obtained from browser DevTools after passing Radware JS challenge.
@@ -1166,6 +1176,433 @@ def fetch_maritime_electric_grid_status():
         return None
 
 
+# ── NEW: DataStream — PEI Surface Water Quality ──────────────────────────────
+
+def fetch_datastream_pei_surface_water():
+    """
+    DataStream API — PEI Surface Water Quality (GPEI EECA).
+    DOI: 10.25976/g5s5-yj38
+
+    Parameters: Dissolved Oxygen, pH, Turbidity, Temperature, Nitrate
+    Requires DATASTREAM_API_KEY env var.
+
+    Returns dict of most recent value per parameter, or None.
+    DO <6 mg/L = aquatic stress; <4 = critical (lobster die-off risk).
+    """
+    if not DATASTREAM_API_KEY:
+        print("  [WARN] DataStream: DATASTREAM_API_KEY not set — skipping", file=sys.stderr)
+        return None
+
+    DOI = "10.25976/g5s5-yj38"
+    url = "https://api.datastream.org/v1/odata/v4/Records"
+    params = {
+        "$filter": f"DOI eq '{DOI}'",
+        "$orderby": "ActivityStartDate desc",
+        "$top": "500",
+        "$select": (
+            "ActivityStartDate,CharacteristicName,"
+            "ResultValue,ResultUnit,MonitoringLocationName"
+        ),
+    }
+    headers = {**HEADERS, "x-api-key": DATASTREAM_API_KEY}
+
+    try:
+        r = requests.get(url, params=params, headers=headers, timeout=30)
+        r.raise_for_status()
+        records = r.json().get("value", [])
+    except Exception as e:
+        print(f"  [WARN] DataStream PEI surface water — {e}", file=sys.stderr)
+        return None
+
+    if not records:
+        return None
+
+    PARAM_MAP = {
+        "Nitrate": "nitrate", "Nitrate-N": "nitrate",
+        "Dissolved oxygen (DO)": "do", "Dissolved Oxygen": "do",
+        "pH": "ph",
+        "Turbidity": "turbidity",
+        "Temperature, water": "temperature", "Temperature": "temperature",
+    }
+
+    latest = {}
+    for rec in records:
+        char = rec.get("CharacteristicName", "")
+        key  = PARAM_MAP.get(char)
+        if not key or key in latest:
+            continue
+        try:
+            val = float(rec.get("ResultValue", ""))
+            latest[key] = {
+                "value":          val,
+                "unit":           rec.get("ResultUnit", ""),
+                "date":           str(rec.get("ActivityStartDate", ""))[:10],
+                "location":       rec.get("MonitoringLocationName", ""),
+                "characteristic": char,
+            }
+        except (TypeError, ValueError):
+            pass
+
+    if not latest:
+        return None
+
+    print(
+        "  [DataStream] PEI surface water: "
+        + ", ".join(f"{k}={v['value']}{v['unit']}" for k, v in latest.items()),
+        file=sys.stderr
+    )
+    return latest
+
+
+# ── NEW: ECCC Hydrometric — PEI River Flow ────────────────────────────────────
+
+def fetch_eccc_pei_river_flow():
+    """
+    ECCC Real-Time Hydrometric — PEI river discharge.
+
+    Stations:
+      01CB002 — Dunk River near Wilmot (heavy potato agriculture watershed)
+      01CA003 — Morell River near Morell (eastern PEI mixed agriculture)
+
+    High flow after rain = elevated nitrate/pesticide runoff risk to estuaries.
+    Returns dict {station_id: {name, flow_m3s, timestamp}}, or None.
+    """
+    STATIONS = {
+        "01CB002": "Dunk River (Wilmot)",
+        "01CA003": "Morell River",
+    }
+    results = {}
+    for station_id, name in STATIONS.items():
+        url = (
+            "https://wateroffice.ec.gc.ca/services/real_time_json.php"
+            f"?stations[]={station_id}&parameters[]=47"
+        )
+        r = get(url)
+        if not r:
+            continue
+        try:
+            data     = r.json()
+            param    = data.get(station_id, {}).get("parameters", {}).get("47", {})
+            readings = param.get("data", [])
+            if not readings:
+                continue
+            latest = readings[-1]
+            val    = float(latest[1]) if latest[1] is not None else None
+            if val is None:
+                continue
+            results[station_id] = {
+                "name":      name,
+                "flow_m3s":  round(val, 2),
+                "timestamp": latest[0],
+            }
+            print(f"  [Hydrometric] {name}: {val:.2f} m³/s", file=sys.stderr)
+        except Exception as e:
+            print(f"  [WARN] Hydrometric {station_id} — {e}", file=sys.stderr)
+
+    return results if results else None
+
+
+# ── NEW: Port Charlottetown Cruise Schedule ───────────────────────────────────
+
+def fetch_charlottetown_cruise_schedule():
+    """
+    Scrapes portcharlottetown.com/cruise-schedule/ for upcoming ship arrivals.
+
+    Returns dict:
+      next_arrival   — {ship, date, time, status}
+      arrivals_30d   — count in next 30 days
+      arrivals_list  — list of up to 10 upcoming arrivals
+      in_season      — bool (May–Oct)
+    """
+    import re as _re
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+
+    url = "https://portcharlottetown.com/cruise-schedule/"
+    s   = soup(url)
+    if not s:
+        return None
+
+    try:
+        arrivals = []
+        now      = _dt.now(_tz.utc)
+        cutoff   = now + _td(days=30)
+
+        page_text = s.get_text(separator="\n")
+        lines     = [l.strip() for l in page_text.split("\n") if l.strip()]
+
+        i = 0
+        while i < len(lines):
+            line   = lines[i]
+            status = None
+            if line in ("On Time", "Delayed", "Cancelled", "Diverted"):
+                status = line
+                i += 1
+                if i < len(lines):
+                    line = lines[i]
+
+            m = _re.search(
+                r"Arriving\s+([A-Z][a-z]+\s+\d+,\s+\d{4})\s*[-–]\s*(\d+:\d+\s*[ap]m)",
+                line, _re.IGNORECASE
+            )
+            if m:
+                date_str = m.group(1).strip()
+                time_str = m.group(2).strip().upper().replace(" ", "")
+                try:
+                    arrival_dt = _dt.strptime(
+                        f"{date_str} {time_str}", "%B %d, %Y %I:%M%p"
+                    ).replace(tzinfo=_tz.utc)
+                    if arrival_dt >= now:
+                        arrivals.append({
+                            "date":     date_str,
+                            "time":     m.group(2).strip(),
+                            "status":   status or "Scheduled",
+                            "ship":     "TBD",
+                            "datetime": arrival_dt.isoformat(),
+                        })
+                except ValueError:
+                    pass
+            i += 1
+
+        # Try to attach ship names from heading elements near arrival text
+        for tag in s.find_all(string=_re.compile(r"Arriving\s+\w+ \d+, \d{4}")):
+            parent = tag.parent
+            for ancestor in [parent, getattr(parent, 'parent', None),
+                              getattr(getattr(parent, 'parent', None), 'parent', None)]:
+                if ancestor is None:
+                    continue
+                heading = ancestor.find(["h1", "h2", "h3", "h4", "strong"])
+                if heading:
+                    candidate = heading.get_text(strip=True)
+                    if (len(candidate) > 3
+                            and "Arriving" not in candidate
+                            and "Port" not in candidate
+                            and "Schedule" not in candidate):
+                        # Match to earliest unmatched arrival without a ship name
+                        for arr in arrivals:
+                            if arr["ship"] == "TBD":
+                                arr["ship"] = candidate
+                                break
+                        break
+
+        arrivals_30d = [
+            a for a in arrivals
+            if _dt.fromisoformat(a["datetime"]) <= cutoff
+        ]
+        in_season = now.month in range(5, 11)
+
+        print(
+            f"  [Cruise] {len(arrivals)} upcoming, {len(arrivals_30d)} in 30 days",
+            file=sys.stderr
+        )
+        return {
+            "next_arrival":  arrivals[0] if arrivals else None,
+            "arrivals_30d":  len(arrivals_30d),
+            "arrivals_list": arrivals[:10],
+            "in_season":     in_season,
+        }
+    except Exception as e:
+        print(f"  [WARN] Cruise schedule — {e}", file=sys.stderr)
+        return None
+
+
+# ── NEW: Northumberland Ferry Advisory Status ─────────────────────────────────
+
+def fetch_northumberland_ferry_status():
+    """
+    Scrapes ferries.ca/travel-advisories for active cancellations or advisories.
+
+    Returns dict: status ("Normal"/"Advisory"/"Cancellation"), advisories list.
+    """
+    import re as _re
+
+    url = "https://www.ferries.ca/travel-advisories"
+    s   = soup(url)
+    if not s:
+        return None
+
+    try:
+        page_text = s.get_text(separator=" ")
+
+        cancelled = bool(_re.search(
+            r"cancel(led|lation)|no\s+sailing|suspended|out\s+of\s+service",
+            page_text, _re.IGNORECASE
+        ))
+        advisory = bool(_re.search(
+            r"advisory|delay|rough|wind\s+warning|motion\s+sickness|reduced",
+            page_text, _re.IGNORECASE
+        ))
+
+        advisories = []
+        SKIP = {"cookie", "privacy", "copyright", "subscribe", "book now",
+                "reservation", "plan your trip"}
+        for tag in s.find_all(["p", "div", "li"]):
+            text = tag.get_text(strip=True)
+            if not (20 <= len(text) <= 400):
+                continue
+            if not _re.search(
+                r"cancel|advisory|delay|rough|wind|motion|suspended|engine|technical",
+                text, _re.IGNORECASE
+            ):
+                continue
+            if any(sk in text.lower() for sk in SKIP):
+                continue
+            if text not in advisories:
+                advisories.append(text[:200])
+
+        status = ("Cancellation" if cancelled else
+                  "Advisory"     if advisory or advisories else
+                  "Normal")
+
+        print(f"  [Ferry] status={status} advisories={len(advisories)}", file=sys.stderr)
+        return {
+            "status":         status,
+            "advisories":     advisories[:3],
+            "advisory_count": len(advisories),
+        }
+    except Exception as e:
+        print(f"  [WARN] Ferry status — {e}", file=sys.stderr)
+        return None
+
+
+# ── NEW: PEI Lobster Ex-Vessel Price ─────────────────────────────────────────
+
+def fetch_pei_lobster_price():
+    """
+    Scrapes CBC PEI RSS for Lobster Fishers of PEI Marketing Board price announcements.
+    Spring season: late April–June. Fall: August–October.
+
+    Returns dict: price_lb_low, price_lb_high, price_kg_low, price_kg_high,
+                  season, season_active, date_reported, headline, source_url
+    """
+    import re as _re
+    from datetime import datetime as _dt, timezone as _tz
+
+    month  = TODAY.month
+    season = ("Spring"    if month in range(4, 7) else
+              "Fall"      if month in range(8, 11) else
+              "Off Season")
+    season_active = season in ("Spring", "Fall")
+
+    result = {"season": season, "season_active": season_active}
+
+    rss_url = "https://www.cbc.ca/cmlink/rss-canada-prince-edward-island"
+    r       = get(rss_url)
+    if not r:
+        return result
+
+    try:
+        s     = BeautifulSoup(r.text, "xml")
+        items = s.find_all("item")
+
+        for item in items:
+            title_tag = item.find("title")
+            desc_tag  = item.find("description")
+            title_text = title_tag.text if title_tag else ""
+            desc_text  = desc_tag.text  if desc_tag  else ""
+            combined   = (title_text + " " + desc_text).lower()
+
+            if "lobster" not in combined:
+                continue
+            if not any(w in combined for w in
+                       ["price", "pound", "per lb", "shore price",
+                        "ex-vessel", "marketing board"]):
+                continue
+
+            price_text = title_text + " " + desc_text
+
+            # Range: "$8 to $8.50 per pound"  /  "8 and 8.50 a pound"
+            pairs = _re.findall(
+                r'\$?\b(\d+(?:\.\d+)?)\s*(?:to|-|and)\s*\$?(\d+(?:\.\d+)?)'
+                r'\s*(?:per\s+pound|/lb|a\s+pound)',
+                price_text, _re.IGNORECASE
+            )
+            if pairs:
+                low  = float(pairs[0][0])
+                high = float(pairs[0][1])
+                result["price_lb_low"]  = min(low, high)
+                result["price_lb_high"] = max(low, high)
+            else:
+                singles = _re.findall(
+                    r'\$(\d+(?:\.\d+)?)\s*(?:per\s+pound|/lb|a\s+pound)',
+                    price_text, _re.IGNORECASE
+                )
+                if singles:
+                    val = float(singles[0])
+                    result["price_lb_low"] = result["price_lb_high"] = val
+
+            if "price_lb_low" in result:
+                result["price_kg_low"]  = round(result["price_lb_low"]  / 0.4536, 2)
+                result["price_kg_high"] = round(result["price_lb_high"] / 0.4536, 2)
+
+                pub  = item.find("pubDate")
+                link = item.find("link")
+                result["date_reported"] = pub.text[:16]  if pub  else GENERATED
+                result["source_url"]    = link.text.strip() if link else rss_url
+                result["headline"]      = title_text.strip()
+
+                print(
+                    f"  [Lobster] ${result['price_lb_low']}–"
+                    f"${result['price_lb_high']}/lb ({season})",
+                    file=sys.stderr
+                )
+                break
+
+    except Exception as e:
+        print(f"  [WARN] Lobster price RSS — {e}", file=sys.stderr)
+
+    return result
+
+
+# ── NEW: Cruise Discharge Risk Card ──────────────────────────────────────────
+
+def build_cruise_discharge_card(cruise_data):
+    """
+    Returns a contextual indicator for cruise ship discharge risk.
+
+    No public real-time discharge monitoring exists for Atlantic Canada.
+    TC Interim Order No.3 (June 2025–June 2026): treated discharge only,
+    no discharge within 3 nm of shore. Northumberland Strait is ~25–35 km
+    wide — most transit is within 12 nm, making compliant windows narrow.
+    The monitoring gap itself is the story.
+    """
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    ships_today = 0
+    next_str    = "None scheduled"
+
+    if cruise_data:
+        now = _dt.now(_tz.utc)
+        today_arrivals = [
+            a for a in cruise_data.get("arrivals_list", [])
+            if a.get("datetime") and
+               abs((_dt.fromisoformat(a["datetime"]) - now).total_seconds()) < 86400
+        ]
+        ships_today = len(today_arrivals)
+        n = cruise_data.get("next_arrival")
+        if n:
+            next_str = f"{n.get('ship','Ship')} · {n.get('date','')} {n.get('time','')}"
+
+    status = "warn"  if ships_today > 0 else "manual"
+    value  = (f"{ships_today} ship(s) in port today"
+              if ships_today else "No ships in port today")
+
+    return {
+        "label":   "Cruise Discharge Risk (Northumberland Strait)",
+        "value":   value,
+        "status":  status,
+        "note":    (
+            f"Strait is ~25–35 km wide — most of it within 12 nm of shore. "
+            f"TC Interim Order No.3 requires treated discharge only; no public "
+            f"real-time monitoring exists for Atlantic Canada. "
+            f"Next arrival: {next_str}"
+        ),
+        "context": "Transport Canada has no public discharge monitoring feed for Atlantic waters",
+        "date":    GENERATED,
+        "source":  "Transport Canada Interim Order No.3 (June 2025); portcharlottetown.com",
+        "tier":    2,
+        "muted":   ships_today == 0,
+    }
+
+
 # ── SECTOR: ENERGY ───────────────────────────────────────────────────────────
 
 def scrape_energy():
@@ -1435,6 +1872,67 @@ def scrape_water():
             note="Potato agriculture — primary source of nitrate contamination in aquifers"))
     t3.append(manual("Coastal Water Quality", "see PEI Open Data",
         source="data.princeedwardisland.ca", tier=3))
+
+    # ── DataStream — Dissolved Oxygen, pH, Turbidity ─────────────────────────
+    ds = fetch_datastream_pei_surface_water()
+    if ds:
+        do = ds.get("do")
+        if do:
+            do_status = ("alert" if do["value"] < 4.0 else
+                         "warn"  if do["value"] < 6.0 else "ok")
+            t2.append(indicator("Dissolved Oxygen — PEI Watersheds",
+                f"{do['value']:.1f}",
+                unit="mg/L",
+                status=do_status,
+                note=("Critical — below 4 mg/L: lobster and shellfish die-off risk"
+                      if do_status == "alert" else
+                      "Below 6 mg/L aquatic stress threshold" if do_status == "warn" else ""),
+                context=f"Site: {do['location']} · Healthy: ≥6 mg/L · Critical: <4 mg/L",
+                date=do["date"],
+                source="DataStream — GPEI EECA Surface Water Quality (DOI: 10.25976/g5s5-yj38)",
+                tier=2))
+        ph = ds.get("ph")
+        if ph:
+            ph_status = ("warn" if not (6.5 <= ph["value"] <= 8.5) else "ok")
+            t2.append(indicator("pH — PEI Watersheds",
+                f"{ph['value']:.1f}",
+                unit="pH",
+                status=ph_status,
+                note="Outside normal range 6.5–8.5" if ph_status == "warn" else "",
+                context=f"Site: {ph['location']} · Normal: 6.5–8.5",
+                date=ph["date"],
+                source="DataStream — GPEI EECA Surface Water Quality",
+                tier=2))
+        turb = ds.get("turbidity")
+        if turb:
+            t3.append(indicator("Turbidity — PEI Watersheds",
+                f"{turb['value']:.1f}",
+                unit=f"{turb['unit']} NTU",
+                status=("warn" if turb["value"] > 25 else "ok"),
+                note="Elevated turbidity — high sediment/runoff load" if turb["value"] > 25 else "",
+                context=f"Site: {turb['location']} · High = storm runoff or erosion",
+                date=turb["date"],
+                source="DataStream — GPEI EECA Surface Water Quality",
+                tier=3))
+
+    # ── ECCC Hydrometric — River Flow (agricultural runoff proxy) ────────────
+    river_flow = fetch_eccc_pei_river_flow()
+    if river_flow:
+        for sid, flow in river_flow.items():
+            high_flow = flow["flow_m3s"] > 15.0
+            ts = flow.get("timestamp", "")
+            t3.append(indicator(
+                f"River Flow — {flow['name']}",
+                flow["flow_m3s"],
+                unit="m³/s",
+                status="warn" if high_flow else "ok",
+                note=("Elevated flow — increased agricultural runoff risk to estuaries"
+                      if high_flow else ""),
+                context="High discharge after rain = nitrate/pesticide runoff from potato fields",
+                date=str(ts)[:10] if ts else GENERATED,
+                source="Environment Canada — Real-Time Hydrometric (ECCC Water Office)",
+                tier=3,
+            ))
 
     return {"tiers": {
         "tier1": {"label": "Critical Infrastructure", "indicators": t1},
@@ -1799,19 +2297,63 @@ def scrape_transport():
         t2.append(manual("Wind Gust (Bridge Area)", "see weather.gc.ca",
             source="Environment Canada", tier=2))
 
-    s2 = soup("https://www.ferries.ca/northumberland/schedule/")
-    f_val, f_status = ("In Season" if TODAY.month in range(5,13) else "Off Season"), \
-                      ("ok"        if TODAY.month in range(5,13) else "manual")
-    if s2 and f_status == "ok":
-        ft = s2.get_text(" ", strip=True).lower()
-        if "cancel" in ft or "suspend" in ft:
-            f_val, f_status = "Disruption", "warn"
+    # ── Northumberland Ferry — live advisory status ──────────────────────────
+    ferry_status = fetch_northumberland_ferry_status()
+    in_season    = TODAY.month in range(5, 13)
+    if ferry_status and in_season:
+        ferry_ind_status = (
+            "alert" if ferry_status["status"] == "Cancellation" else
+            "warn"  if ferry_status["status"] == "Advisory"     else
+            "ok"
+        )
+        ferry_note = ferry_status["advisories"][0] if ferry_status["advisories"] else ""
+        t2.append(indicator("Northumberland Ferry", ferry_status["status"],
+            unit="Wood Islands ↔ Pictou",
+            status=ferry_ind_status,
+            note=ferry_note[:120] if ferry_note else "",
+            context="Seasonal alternate crossing (May–Dec) · 75 min · 8 sailings/day peak",
+            source="ferries.ca/travel-advisories", tier=2, date=GENERATED))
+    elif in_season:
+        # Fallback if scrape fails — use old simple check
+        s2 = soup("https://www.ferries.ca/northumberland/schedule/")
+        f_val, f_status = "In Season", "ok"
+        if s2:
+            ft = s2.get_text(" ", strip=True).lower()
+            if "cancel" in ft or "suspend" in ft:
+                f_val, f_status = "Disruption", "warn"
+        t2.append(indicator("Northumberland Ferry", f_val,
+            unit="Wood Islands ↔ Pictou", status=f_status,
+            context="Seasonal alternate crossing (May–Dec) · 75 min",
+            source="ferries.ca", tier=2, date=GENERATED))
+    else:
+        t2.append(indicator("Northumberland Ferry", "Off Season",
+            unit="Resumes May",
+            status="manual",
+            context="Wood Islands ↔ Pictou · 75 min crossing",
+            source="ferries.ca", tier=2, date=GENERATED))
 
-    t2.append(indicator("Northumberland Ferry", f_val,
-        unit="Wood Islands ↔ Pictou",
-        status=f_status,
-        context="Seasonal alternate crossing (May–Dec) · 75 min",
-        source="ferries.ca", tier=2, date=GENERATED))
+    # ── Port Charlottetown — Cruise Ship Arrivals ────────────────────────────
+    cruise = fetch_charlottetown_cruise_schedule()
+    if cruise and cruise.get("in_season"):
+        n       = cruise.get("next_arrival")
+        next_str = (
+            f"{n.get('ship','Ship')} arriving {n.get('date','')} {n.get('time','')}"
+            if n else "None scheduled soon"
+        )
+        t2.append(indicator("Cruise Ships — Charlottetown",
+            str(cruise["arrivals_30d"]),
+            unit="arrivals in next 30 days",
+            status="ok",
+            context=f"Next: {next_str} · Season: May–Oct",
+            source="Port Charlottetown (portcharlottetown.com/cruise-schedule/)",
+            tier=2, date=GENERATED))
+    elif cruise and not cruise.get("in_season"):
+        t2.append(manual("Cruise Ships — Charlottetown", "Off Season (resumes May)",
+            source="Port Charlottetown", tier=2))
+    else:
+        t2.append(manual("Cruise Ships — Charlottetown", "see portcharlottetown.com",
+            source="Port Charlottetown", tier=2,
+            note="~60–80 calls/year; primary cultural tourism driver"))
 
     metar = fetch_metar("CYYG")
     if metar:
@@ -2296,12 +2838,37 @@ def scrape_financial():
             source="Statistics Canada", tier=2,
             note="Monthly release — PEI-specific price levels"))
 
-    t3.append(manual("Lobster Ex-Vessel Price", "see GPEI Fisheries",
-        source="GPEI Fisheries and Communities", tier=3,
-        note="PEI lobster — primary export commodity; spring/fall seasons"))
+    # ── Lobster Ex-Vessel Price — CBC PEI RSS / Marketing Board ─────────────
+    lobster = fetch_pei_lobster_price()
+    if lobster and lobster.get("price_lb_low") and lobster.get("season_active"):
+        low      = lobster["price_lb_low"]
+        high     = lobster["price_lb_high"]
+        kg_low   = lobster.get("price_kg_low",  round(low  / 0.4536, 2))
+        kg_high  = lobster.get("price_kg_high", round(high / 0.4536, 2))
+        price_str = f"${low}–${high}" if low != high else f"${low}"
+        t3.append(indicator("Lobster Ex-Vessel Price", price_str,
+            unit=f"/lb  (${kg_low}–${kg_high}/kg)",
+            status="ok",
+            note=lobster.get("headline", ""),
+            context=(
+                f"Lobster Fishers of PEI Marketing Board · {lobster['season']} season · "
+                "Canner vs market grade differential typical"
+            ),
+            date=lobster.get("date_reported", GENERATED),
+            source=lobster.get("source_url", "CBC PEI / GPEI Fisheries"),
+            tier=3))
+    else:
+        season_note = f"Currently: {lobster['season']}" if lobster else ""
+        t3.append(manual("Lobster Ex-Vessel Price",
+            f"see GPEI Fisheries · {season_note}".strip(" ·"),
+            source="Lobster Fishers of PEI Marketing Board / GPEI Fisheries", tier=3,
+            note="Spring: late April–June. Fall: August–October."))
+
+    # ── Tourism Activity ─────────────────────────────────────────────────────
     t3.append(manual("Tourism Activity", "see tourismpei.com",
         source="Tourism PEI", tier=3,
-        note="~$500M annually; highly seasonal (June–Sept)"))
+        note="~$500M annually; highly seasonal (June–Sept). "
+             "Use Cruise Ships indicator in Transport for visitor volume signal."))
 
     return {"tiers": {
         "tier1": {"label": "Critical Infrastructure", "indicators": t1},
@@ -2459,6 +3026,11 @@ def scrape_environment():
             source="NOAA CoastWatch / DFO Bedford Institute", tier=2,
             note="Warm Gulf SST amplifies storm systems and coastal erosion"))
 
+    # ── Cruise Ship Discharge Risk ────────────────────────────────────────────
+    # Fetch cruise data here (independent of scrape_transport call order)
+    cruise_env = fetch_charlottetown_cruise_schedule()
+    t2.append(build_cruise_discharge_card(cruise_env))
+
     # ── Canadian Drought Monitor — AAFC GeoJSON ──────────────────────────────
     drought = fetch_aafc_drought_pei()
     if drought:
@@ -2595,7 +3167,7 @@ def scrape_food():
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def run():
-    print(f"[PII Scraper v2] {GENERATED}")
+    print(f"[PII Scraper v4] {GENERATED}")
     sectors  = {}
     scrapers = [
         ("energy",             "Energy",               scrape_energy),
@@ -2623,7 +3195,7 @@ def run():
             }}}
 
     output = {"generated": GENERATED, "timestamp": GENERATED,
-              "source": "PEI Infrastructure Intelligence v2", "sectors": sectors}
+              "source": "PEI Infrastructure Intelligence v4", "sectors": sectors}
 
     for p in [Path(f"pii_data_{DATESTAMP}.json"), Path("pii_data_latest.json")]:
         p.write_text(json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
